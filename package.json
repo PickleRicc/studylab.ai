@@ -2,11 +2,13 @@
   "name": "studylabai",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:process": "node scripts/test-processing.js"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.26.0",
@@ -14,7 +16,11 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "cookie": "^1.0.2",
+    "fluent-ffmpeg": "^2.1.2",
     "next": "15.1.3",
+    "openai": "^4.24.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^4.0.379",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.5"

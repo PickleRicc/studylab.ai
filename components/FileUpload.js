@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { DocumentTextIcon, MusicalNoteIcon } from '@heroicons/react/24/outline'
 import { supabase } from '../utils/supabase'
@@ -17,6 +17,7 @@ export default function FileUpload({ onSuccess }) {
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState(null)
     const [uploadProgress, setUploadProgress] = useState(0)
+    const [currentFile, setCurrentFile] = useState(null)
 
     const uploadFiles = async (acceptedFiles) => {
         if (acceptedFiles.length === 0) return
@@ -34,9 +35,16 @@ export default function FileUpload({ onSuccess }) {
 
             for (let i = 0; i < acceptedFiles.length; i++) {
                 const file = acceptedFiles[i]
-                setUploadProgress(Math.round((i / totalFiles) * 100))
+                setCurrentFile(file.name)
+                
+                // Calculate overall progress considering both upload and processing for each file
+                const baseProgress = (i / totalFiles) * 100
+                setUploadProgress(baseProgress)
 
-                // Upload file
+                console.log(`Processing file ${i + 1} of ${totalFiles}: ${file.name}`)
+
+                // Upload file (first 50% of progress for current file)
+                setUploadProgress(baseProgress + (50 / totalFiles))
                 const response = await fetch('/api/upload', {
                     method: 'POST',
                     headers: {
@@ -54,6 +62,32 @@ export default function FileUpload({ onSuccess }) {
 
                 const data = await response.json()
                 results.push(data.file)
+
+                // Process the file (remaining 50% of progress for current file)
+                setUploadProgress(baseProgress + (75 / totalFiles))
+                const processResponse = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'x-file-name': file.name
+                    },
+                    body: file
+                })
+
+                if (!processResponse.ok) {
+                    const error = await processResponse.json()
+                    throw new Error(error.message)
+                }
+
+                const processedData = await processResponse.json()
+                console.log(`File processed successfully: ${file.name}`, {
+                    type: processedData.info.type,
+                    size: file.size,
+                    ...(processedData.numPages && { pages: processedData.numPages }),
+                    ...(processedData.info.format && { format: processedData.info.format })
+                })
+
+                // Update progress for completed file
+                setUploadProgress(baseProgress + (100 / totalFiles))
             }
 
             setUploadProgress(100)
@@ -62,9 +96,10 @@ export default function FileUpload({ onSuccess }) {
             }
         } catch (err) {
             console.error('Upload error:', err)
-            setError(err.message)
+            setError(`Error processing ${currentFile}: ${err.message}`)
         } finally {
             setUploading(false)
+            setCurrentFile(null)
         }
     }
 
@@ -74,7 +109,7 @@ export default function FileUpload({ onSuccess }) {
             'application/pdf': ['.pdf'],
             'audio/*': ['.mp3', '.wav', '.m4a']
         },
-        multiple: true,
+        multiple: true, // Allow multiple files
         noClick: true // Disable click handling on the root element
     })
 
@@ -120,13 +155,19 @@ export default function FileUpload({ onSuccess }) {
                             ></div>
                         </div>
                         <p className="text-sm text-gray-600 mt-2">
-                            {uploadProgress}% uploaded
+                            {currentFile ? (
+                                `Processing: ${currentFile} (${Math.round(uploadProgress)}%)`
+                            ) : (
+                                `Overall Progress: ${Math.round(uploadProgress)}%`
+                            )}
                         </p>
                     </div>
                 )}
                 {uploading && (
                     <div className="mt-4">
-                        <p className="text-blue-500">Uploading...</p>
+                        <p className="text-blue-500">
+                            {currentFile ? `Processing ${currentFile}...` : 'Processing files...'}
+                        </p>
                     </div>
                 )}
                 {error && (

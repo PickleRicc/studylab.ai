@@ -127,22 +127,30 @@ DO NOT include any other text, markdown formatting, or code blocks. Return ONLY 
             const remainingTotal = config.numQuestions - allQuestions.length;
             if (remainingTotal <= 0) return [];
 
-            // Adjust chunks needed based on remaining questions
-            const chunksNeeded = Math.ceil(remainingTotal / questionsPerChunk);
+            // Calculate optimal number of chunks and questions per chunk
+            const optimalQuestionsPerChunk = Math.ceil(remainingTotal / Math.min(remainingTotal, 4)); // Max 4 chunks
+            const chunksNeeded = Math.ceil(remainingTotal / optimalQuestionsPerChunk);
+            
+            console.log(`Remaining questions: ${remainingTotal}, Questions per chunk: ${optimalQuestionsPerChunk}`);
+            
+            // Select chunks evenly distributed
             const selectedChunks = selectDistributedChunks(chunks, chunksNeeded);
             console.log(`Selected ${selectedChunks.length} chunks from ${source.source || 'Unknown'}`);
 
-            // Process chunks in parallel
-            const chunkQuestions = await Promise.all(selectedChunks.map(async (chunk, chunkIndex) => {
-                const currentTotal = allQuestions.length;
-                if (currentTotal >= config.numQuestions) return [];
+            // Process chunks sequentially to maintain better control
+            const chunkQuestions = [];
+            for (const [chunkIndex, chunk] of selectedChunks.entries()) {
+                const currentTotal = allQuestions.length + chunkQuestions.flat().length;
+                if (currentTotal >= config.numQuestions) break;
 
                 // Calculate questions for this chunk
                 const remainingNeeded = config.numQuestions - currentTotal;
                 const isLastChunk = chunkIndex === selectedChunks.length - 1;
-                const questionsForChunk = isLastChunk ? remainingNeeded : Math.min(questionsPerChunk, remainingNeeded);
+                const questionsForChunk = isLastChunk 
+                    ? remainingNeeded 
+                    : Math.min(optimalQuestionsPerChunk, remainingNeeded);
 
-                if (questionsForChunk <= 0) return [];
+                if (questionsForChunk <= 0) break;
 
                 try {
                     console.log(`Generating ${questionsForChunk} questions from chunk ${chunk.metadata?.chunkIndex}`);
@@ -180,10 +188,10 @@ DO NOT include any other text, markdown formatting, or code blocks. Return ONLY 
                     });
 
                     // Extract questions and add metadata
-                    const questions = response?.questions || [];
+                    const questions = (response?.questions || []).slice(0, questionsForChunk);
                     
                     // Update question type counts and validate total
-                    const validQuestions = questions.slice(0, questionsForChunk).map((q, idx) => {
+                    const validQuestions = questions.map((q, idx) => {
                         if (questionTypeCount[q.type] > 0) {
                             questionTypeCount[q.type]--;
                             return {
@@ -196,13 +204,12 @@ DO NOT include any other text, markdown formatting, or code blocks. Return ONLY 
                         return null;
                     }).filter(Boolean);
 
-                    return validQuestions;
+                    chunkQuestions.push(validQuestions);
 
                 } catch (error) {
                     console.error(`Error generating questions from chunk:`, error);
-                    return [];
                 }
-            }));
+            }
 
             return chunkQuestions.flat();
         }));

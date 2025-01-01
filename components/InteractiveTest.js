@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { supabase } from '../utils/supabase';
 
-export default function InteractiveTest({ test, onClose }) {
+export default function InteractiveTest({ test, onClose, onTestComplete }) {
     const [answers, setAnswers] = useState({});
     const [submitted, setSubmitted] = useState(false);
     const [score, setScore] = useState(null);
@@ -16,13 +17,13 @@ export default function InteractiveTest({ test, onClose }) {
         let correct = 0;
         test.questions.forEach((question, index) => {
             if (question.type === 'multiple_choice') {
-                if (answers[index] === question.answer) {
+                if (answers[index] === question.correctAnswer) {
                     correct++;
                 }
             } else if (question.type === 'short_answer') {
                 // For short answers, we'll do a simple case-insensitive comparison
                 // You might want to implement more sophisticated answer checking
-                if (answers[index]?.toLowerCase().trim() === question.answer.toLowerCase().trim()) {
+                if (answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()) {
                     correct++;
                 }
             }
@@ -30,17 +31,41 @@ export default function InteractiveTest({ test, onClose }) {
         return Math.round((correct / test.questions.length) * 100);
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         const finalScore = calculateScore();
         setScore(finalScore);
         setSubmitted(true);
+
+        try {
+            // Update the test's last score
+            const { error } = await supabase
+                .from('tests')
+                .update({ last_score: finalScore })
+                .eq('id', test.id);
+
+            if (error) throw error;
+
+            // Notify parent component of test completion
+            if (onTestComplete) {
+                onTestComplete(test.id, finalScore);
+            }
+        } catch (error) {
+            console.error('Error saving test score:', error);
+        }
     };
 
     return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
             <div className="relative top-5 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white mb-10">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Test #{test.id}</h2>
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900">
+                            {test.title || `Test #${test.id}`}
+                        </h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {test.questions?.length} questions • {test.config?.difficulty} difficulty
+                        </p>
+                    </div>
                     <button
                         onClick={onClose}
                         className="text-gray-500 hover:text-gray-700"
@@ -58,7 +83,7 @@ export default function InteractiveTest({ test, onClose }) {
                 )}
 
                 <div className="space-y-6">
-                    {test.questions.map((question, index) => (
+                    {test?.questions?.map((question, index) => (
                         <div key={index} className="p-4 border rounded">
                             <p className="font-medium mb-3">
                                 {index + 1}. {question.question}
@@ -66,7 +91,7 @@ export default function InteractiveTest({ test, onClose }) {
 
                             {question.type === 'multiple_choice' ? (
                                 <div className="space-y-2">
-                                    {question.choices.map((choice, choiceIndex) => (
+                                    {question.options?.map((choice, choiceIndex) => (
                                         <label
                                             key={choiceIndex}
                                             className="flex items-center space-x-2 cursor-pointer"
@@ -74,7 +99,7 @@ export default function InteractiveTest({ test, onClose }) {
                                             <input
                                                 type="radio"
                                                 name={`question-${index}`}
-                                                value={choice.replace(/^[A-D]\) /, '')}
+                                                value={choice}
                                                 onChange={(e) => handleAnswerChange(index, e.target.value)}
                                                 disabled={submitted}
                                                 className="form-radio"
@@ -96,11 +121,11 @@ export default function InteractiveTest({ test, onClose }) {
                             {submitted && (
                                 <div className="mt-3">
                                     <p className={`text-sm ${
-                                        answers[index]?.toLowerCase().trim() === question.answer.toLowerCase().trim()
+                                        answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                             ? 'text-green-600'
                                             : 'text-red-600'
                                     }`}>
-                                        Correct Answer: {question.answer}
+                                        Correct Answer: {question.correctAnswer}
                                     </p>
                                 </div>
                             )}

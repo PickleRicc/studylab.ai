@@ -29,73 +29,220 @@ export const testQuestionSchema = {
 };
 
 /**
- * Generates test questions from text content
- * @param {string} content - The text content to generate questions from
+ * Generates test questions from multiple content sources
+ * @param {Array} contentSources - Array of content objects with text and metadata
  * @param {Object} config - Test configuration options
- * @returns {Promise<Array>} Array of generated questions
+ * @returns {Promise<Object>} Object containing generated questions
  */
-export async function generateTest(content, config) {
+export async function generateTest(contentSources, config) {
     try {
-        console.log('Generating test with content length:', content.length);
-        console.log('Test configuration:', config);
+        console.log('Generating test with config:', config);
+        console.log('Number of content sources:', contentSources.length);
+        console.log('Content sources details:');
+        contentSources.forEach((source, idx) => {
+            console.log(`Source ${idx + 1}:`, {
+                source: source.source,
+                hasContent: !!source.content,
+                contentLength: source.content?.length,
+                hasChunks: !!source.chunks,
+                numChunks: source.chunks?.length
+            });
+        });
 
         const model = new ChatOpenAI({
-    modelName: "gpt-4o",
-    temperature: 0.2, // Lower temperature for more consistent output
+            modelName: "gpt-4o",
+            temperature: 0.2,
         });
+
+        const formatInstructions = `
+You must respond with a JSON object in this exact format, following these rules:
+1. For multiple_choice questions:
+   - Include an "options" array with exactly 4 options
+   - The "correctAnswer" must match one of the options exactly
+2. For short_answer questions:
+   - Do not include an "options" array
+   - The "correctAnswer" should be a brief, clear answer
+
+Example format:
+{
+    "questions": [
+        {
+            "question": "The actual question text",
+            "type": "multiple_choice",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correctAnswer": "Option A",
+            "explanation": "Explanation of why this is correct"
+        },
+        {
+            "question": "The actual question text",
+            "type": "short_answer",
+            "correctAnswer": "The brief answer",
+            "explanation": "Explanation of why this is correct"
+        }
+    ]
+}
+
+Generate an equal mix of the following question types: ${config.questionTypes.join(', ')}.
+DO NOT include any other text, markdown formatting, or code blocks. Return ONLY the JSON object.`;
 
         const parser = new JsonOutputParser();
+        let allQuestions = [];
 
-        // Create different prompts based on question type
-        let promptContent = '';
-        if (config.questionTypes.includes('multiple_choice')) {
-            promptContent += `
-            For multiple choice questions:
-            - Create exactly 4 options (A, B, C, D)
-            - Make sure one option is clearly correct
-            - Make other options plausible but incorrect
-            `;
-        }
-        if (config.questionTypes.includes('short_answer')) {
-            promptContent += `
-            For short answer questions:
-            - Create questions that require brief, specific answers
-            - Answers should be 1-2 sentences
-            `;
-        }
+        // Calculate questions per type
+        const questionsPerType = Math.floor(config.numQuestions / config.questionTypes.length);
+        const remainingQuestions = config.numQuestions % config.questionTypes.length;
+        
+        // Create a map of how many questions we need for each type
+        const questionTypeCount = config.questionTypes.reduce((acc, type, index) => {
+            acc[type] = questionsPerType + (index < remainingQuestions ? 1 : 0);
+            return acc;
+        }, {});
 
-        const promptTemplate = ChatPromptTemplate.fromTemplate(`
-            You are an expert test creator. Create a test with {numQuestions} questions based on the following content.
-            The test should be at {difficulty} difficulty level.
-            Only create questions of these types: {questionTypes}.
-            
-            ${promptContent}
+        console.log('Questions per type:', questionTypeCount);
 
-            Format your response as a JSON array where each question object has:
-            - question: the question text
-            - type: either "multiple_choice" or "short_answer"
-            - choices: array of 4 options (for multiple choice only)
-            - answer: the correct answer
-            
-            Content to generate questions about:
-            {content}
-        `);
+        // Optimize chunks needed based on total questions
+        const questionsPerChunk = 3;
+        const chunksNeeded = Math.ceil(config.numQuestions / questionsPerChunk);
+        const chunksPerSource = Math.ceil(chunksNeeded / contentSources.length);
 
-        const chain = promptTemplate.pipe(model).pipe(parser);
+        // Process sources in parallel
+        const processedSources = await Promise.all(contentSources.map(async (source) => {
+            if (allQuestions.length >= config.numQuestions) return [];
 
-        const response = await chain.invoke({
-            content: content,
-            numQuestions: config.numQuestions,
-            questionTypes: config.questionTypes.join(", "),
-            difficulty: config.difficulty,
-        });
+            // If no chunks available, create a single chunk from content
+            let chunks = source.chunks || [];
+            if (chunks.length === 0 && source.content) {
+                chunks = [{
+                    pageContent: source.content,
+                    metadata: { chunkIndex: 0 }
+                }];
+            }
 
-        console.log('Generated questions:', response.length);
-        return { questions: response };
+            if (chunks.length === 0) {
+                console.log(`No content or chunks found for source: ${source.source || 'Unknown'}`);
+                return [];
+            }
+
+            // Calculate remaining questions needed
+            const remainingTotal = config.numQuestions - allQuestions.length;
+            if (remainingTotal <= 0) return [];
+
+            // Adjust chunks needed based on remaining questions
+            const chunksNeeded = Math.ceil(remainingTotal / questionsPerChunk);
+            const selectedChunks = selectDistributedChunks(chunks, chunksNeeded);
+            console.log(`Selected ${selectedChunks.length} chunks from ${source.source || 'Unknown'}`);
+
+            // Process chunks in parallel
+            const chunkQuestions = await Promise.all(selectedChunks.map(async (chunk, chunkIndex) => {
+                const currentTotal = allQuestions.length;
+                if (currentTotal >= config.numQuestions) return [];
+
+                // Calculate questions for this chunk
+                const remainingNeeded = config.numQuestions - currentTotal;
+                const isLastChunk = chunkIndex === selectedChunks.length - 1;
+                const questionsForChunk = isLastChunk ? remainingNeeded : Math.min(questionsPerChunk, remainingNeeded);
+
+                if (questionsForChunk <= 0) return [];
+
+                try {
+                    console.log(`Generating ${questionsForChunk} questions from chunk ${chunk.metadata?.chunkIndex}`);
+                    
+                    const prompt = ChatPromptTemplate.fromTemplate(
+                        `You are an expert test creator. Generate {numQuestions} questions based on the provided content.
+                        The test should be at {difficulty} difficulty level.
+                        
+                        Requirements:
+                        - Create exactly {numQuestions} questions from this content
+                        - Make questions challenging but clear
+                        - Ensure answers are unambiguous
+                        - Questions must be based on the provided content only
+                        - For multiple choice questions, include exactly 4 options
+                        
+                        {format_instructions}
+                        
+                        Content from {source}:
+                        {content}`
+                    );
+
+                    const partialedPrompt = await prompt.partial({
+                        format_instructions: formatInstructions,
+                    });
+
+                    const chain = partialedPrompt.pipe(model).pipe(parser);
+
+                    const response = await chain.invoke({
+                        content: chunk.pageContent,
+                        source: source.source || 'Unknown',
+                        numQuestions: questionsForChunk,
+                        difficulty: config.difficulty,
+                        questionTypes: config.questionTypes,
+                        questionTypeCount: JSON.stringify(questionTypeCount)
+                    });
+
+                    // Extract questions and add metadata
+                    const questions = response?.questions || [];
+                    
+                    // Update question type counts and validate total
+                    const validQuestions = questions.slice(0, questionsForChunk).map((q, idx) => {
+                        if (questionTypeCount[q.type] > 0) {
+                            questionTypeCount[q.type]--;
+                            return {
+                                ...q,
+                                id: `q${currentTotal + idx + 1}`,
+                                source: source.source || 'Unknown',
+                                chunkIndex: chunk.metadata?.chunkIndex
+                            };
+                        }
+                        return null;
+                    }).filter(Boolean);
+
+                    return validQuestions;
+
+                } catch (error) {
+                    console.error(`Error generating questions from chunk:`, error);
+                    return [];
+                }
+            }));
+
+            return chunkQuestions.flat();
+        }));
+
+        // Combine all questions and ensure we don't exceed the requested number
+        allQuestions = processedSources.flat().slice(0, config.numQuestions);
+        console.log('Total questions generated:', allQuestions.length);
+        return {
+            id: Date.now().toString(),
+            title: config.title,
+            config: {
+                difficulty: config.difficulty,
+                numQuestions: config.numQuestions
+            },
+            questions: allQuestions
+        };
     } catch (error) {
-        console.error('Error generating test:', error);
+        console.error('Error in test generation:', error);
         throw error;
     }
+}
+
+/**
+ * Select chunks distributed evenly throughout the document
+ * @param {Array} chunks - Array of all chunks
+ * @param {number} numChunks - Number of chunks to select
+ * @returns {Array} Selected chunks
+ */
+function selectDistributedChunks(chunks, numChunks) {
+    if (numChunks >= chunks.length) return chunks;
+    
+    const step = chunks.length / numChunks;
+    const selectedChunks = [];
+    
+    for (let i = 0; i < numChunks; i++) {
+        const index = Math.floor(i * step);
+        selectedChunks.push(chunks[index]);
+    }
+    
+    return selectedChunks;
 }
 
 /**
@@ -134,4 +281,44 @@ export function scoreTest(questions, answers) {
 
   results.score = (results.correctAnswers / results.totalQuestions) * 100;
   return results;
+}
+
+/**
+ * Validate test configuration
+ * @param {Object} config - Test configuration to validate
+ * @returns {boolean} True if valid, throws error if invalid
+ */
+export function validateTestConfig(config) {
+    const {
+        numQuestions,
+        questionTypes,
+        difficulty,
+        title
+    } = config;
+
+    if (!numQuestions || numQuestions < 1) {
+        throw new Error('Number of questions must be at least 1');
+    }
+
+    if (!questionTypes || questionTypes.length === 0) {
+        throw new Error('At least one question type must be specified');
+    }
+
+    const validTypes = ['multiple_choice', 'short_answer'];
+    for (const type of questionTypes) {
+        if (!validTypes.includes(type)) {
+            throw new Error(`Invalid question type: ${type}`);
+        }
+    }
+
+    const validDifficulties = ['easy', 'medium', 'hard'];
+    if (!validDifficulties.includes(difficulty)) {
+        throw new Error(`Invalid difficulty: ${difficulty}`);
+    }
+
+    if (!title || title.trim().length === 0) {
+        throw new Error('Test title is required');
+    }
+
+    return true;
 }

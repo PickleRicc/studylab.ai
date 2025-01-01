@@ -1,26 +1,75 @@
 import { Fragment } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import { useState } from 'react';
+import { useRouter } from 'next/router';
+import { CheckCircleIcon } from '@heroicons/react/24/outline';
 
 export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultConfig = {} }) {
   const {
     numQuestions = 5,
     questionTypes = ['multiple_choice'],
-    difficulty = 'medium'
+    difficulty = 'medium',
+    title = ''
   } = defaultConfig;
 
-  const handleSubmit = (e) => {
+  const [testName, setTestName] = useState(title);
+  const [nameError, setNameError] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const router = useRouter();
+  const maxLength = 50;
+
+  const validateTestName = (name) => {
+    if (name.length === 0) {
+      setNameError('Test name is required');
+      return false;
+    }
+    if (name.length > maxLength) {
+      setNameError(`Test name must be ${maxLength} characters or less`);
+      return false;
+    }
+    setNameError('');
+    return true;
+  };
+
+  const handleTestNameChange = (e) => {
+    const name = e.target.value;
+    setTestName(name);
+    validateTestName(name);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
+    const name = formData.get('title').trim();
+    
+    if (!validateTestName(name)) {
+      return;
+    }
     
     const config = {
+      title: name,
       numQuestions: parseInt(formData.get('numQuestions')),
       questionTypes: Array.from(formData.getAll('questionTypes')),
       difficulty: formData.get('difficulty')
     };
 
-    onGenerate(config);
-    onClose();
+    setIsGenerating(true);
+    try {
+      await onGenerate(config);
+      setIsSuccess(true);
+      // Wait 1.5 seconds to show success message before closing
+      setTimeout(() => {
+        setIsSuccess(false);
+        setIsGenerating(false);
+        onClose();
+        router.push('/tests');
+      }, 1500);
+    } catch (error) {
+      console.error('Error generating test:', error);
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -66,6 +115,46 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                       Configure Test
                     </Dialog.Title>
                     <form onSubmit={handleSubmit} className="mt-4 space-y-6">
+                      {/* Test Name */}
+                      <div className="space-y-1">
+                        <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                          Test Name <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            name="title"
+                            id="title"
+                            value={testName}
+                            onChange={handleTestNameChange}
+                            placeholder="Enter a descriptive name for your test"
+                            className={`mt-1 block w-full rounded-md shadow-sm text-base py-2.5 px-4
+                              ${nameError 
+                                ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                              }`}
+                          />
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-4">
+                            <span className={`text-sm ${
+                              testName.length > maxLength 
+                                ? 'text-red-500' 
+                                : testName.length > maxLength * 0.8 
+                                  ? 'text-yellow-500' 
+                                  : 'text-gray-400'
+                            }`}>
+                              {testName.length}/{maxLength}
+                            </span>
+                          </div>
+                        </div>
+                        {nameError && (
+                          <p className="mt-1 text-sm text-red-600">
+                            {nameError}
+                          </p>
+                        )}
+                        <p className="mt-1 text-sm text-gray-500">
+                          Choose a clear, descriptive name to help you identify this test later
+                        </p>
+                      </div>
                       {/* Number of Questions */}
                       <div>
                         <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700">
@@ -77,7 +166,7 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                           defaultValue={numQuestions}
                           className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
                         >
-                          {[5, 10, 15, 20].map(num => (
+                          {[5, 10, 15, 20, 50, 70].map(num => (
                             <option key={num} value={num}>{num}</option>
                           ))}
                         </select>
@@ -137,12 +226,32 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                         </select>
                       </div>
 
-                      <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                      <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
                         <button
                           type="submit"
-                          className="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto"
+                          disabled={isGenerating}
+                          className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm 
+                            ${isSuccess 
+                              ? 'bg-green-600'
+                              : isGenerating 
+                                ? 'bg-blue-400 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-500'
+                            } sm:col-start-2`}
                         >
-                          Generate Test
+                          {isSuccess ? (
+                            <>
+                              <CheckCircleIcon className="h-5 w-5 mr-2" />
+                              Test Generated!
+                            </>
+                          ) : isGenerating ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Generating...
+                            </>
+                          ) : 'Generate Test'}
                         </button>
                         <button
                           type="button"

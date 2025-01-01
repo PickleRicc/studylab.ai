@@ -7,7 +7,21 @@ import pdf from 'pdf-parse';
  */
 export async function extractTextFromPDF(fileBuffer) {
   try {
+    console.log('Starting PDF extraction...');
+    console.log('Buffer size:', fileBuffer.length);
+    console.log('Buffer type:', fileBuffer.constructor.name);
+    
+    // Validate PDF header
+    const header = fileBuffer.slice(0, 5).toString();
+    console.log('File header:', header);
+    if (header !== '%PDF-') {
+      throw new Error('Invalid PDF header');
+    }
+
     const data = await pdf(fileBuffer);
+    console.log('PDF parsed successfully');
+    console.log('Number of pages:', data.numpages);
+    console.log('Text length:', data.text.length);
     
     return {
       text: data.text,

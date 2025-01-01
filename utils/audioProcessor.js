@@ -5,9 +5,8 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error('Missing OPENAI_API_KEY environment variable');
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Cache for storing processed audio results
+const audioCache = new Map();
 
 const SUPPORTED_FORMATS = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm'];
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -20,9 +19,18 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
  */
 export async function transcribeAudio(fileBuffer, fileName) {
   try {
+    // Check cache first
+    const cacheKey = Buffer.from(fileBuffer).toString('base64');
+    if (audioCache.has(cacheKey)) {
+      console.log('Using cached transcription for:', fileName);
+      return audioCache.get(cacheKey);
+    }
+
+    console.log('Starting audio transcription for:', fileName);
+
     // Get file extension and validate format
     const ext = fileName.split('.').pop().toLowerCase();
-    
+
     if (!SUPPORTED_FORMATS.includes(ext)) {
       throw new Error(`Unsupported audio format: ${ext}. Supported formats: ${SUPPORTED_FORMATS.join(', ')}`);
     }
@@ -32,36 +40,44 @@ export async function transcribeAudio(fileBuffer, fileName) {
       throw new Error('Audio file size exceeds 25MB limit');
     }
 
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
     // Create a Blob from the buffer
     const blob = new Blob([fileBuffer], { type: `audio/${ext}` });
     const file = new File([blob], fileName, { type: `audio/${ext}` });
 
-    // Send to OpenAI for transcription
-    const response = await openai.audio.transcriptions.create({
-      file: file,
+    const transcription = await openai.audio.transcriptions.create({
+      file,
       model: "whisper-1",
-      response_format: "text",
-      language: "en"
+      response_format: "json",
+      temperature: 0.2,
+      prompt: "This is an academic or scientific text. Please transcribe accurately."
     });
 
-    return {
-      text: response,
+    const result = {
+      text: transcription.text,
       info: {
-        model: "whisper-1",
-        type: "audio_transcription",
-        format: ext
+        type: 'audio_transcription',
+        format: ext,
+        processor: 'whisper-api'
       }
     };
 
+    // Cache the result
+    audioCache.set(cacheKey, result);
+
+    return result;
   } catch (error) {
-    console.error('Error transcribing audio:', error);
-    
+    console.error('Error in audio transcription:', error);
+
     if (error.error?.message) {
       throw new Error(`Transcription failed: ${error.error.message}`);
     } else if (error.message) {
       throw new Error(error.message);
     }
-    
+
     throw new Error('Failed to transcribe audio file');
   }
 }

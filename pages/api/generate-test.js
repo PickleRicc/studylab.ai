@@ -19,16 +19,16 @@ export default async function handler(req, res) {
     }
 
     console.log('Received test generation request');
-    const { content, config } = req.body;
     
-    if (!content) {
-      console.error('No content provided');
-      return res.status(400).json({ error: 'No content provided' });
+    // Get auth token from header
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing authorization header' });
     }
 
     // Get the current user's session
     const { data: { user }, error: authError } = await supabase.auth.getUser(
-      req.headers.authorization?.split(' ')[1]
+      authHeader.split(' ')[1]
     );
 
     if (authError || !user) {
@@ -36,11 +36,69 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
+    const { content, files, config } = req.body;
+    
+    if (!content && !files) {
+      console.error('No content provided');
+      return res.status(400).json({ error: 'No content provided' });
+    }
+
+    console.log('Raw request body:', {
+      hasContent: !!content,
+      hasFiles: !!files,
+      filesLength: files?.length,
+      config
+    });
+
+    if (files) {
+      console.log('Files array details:');
+      files.forEach((file, idx) => {
+        console.log(`File ${idx + 1}:`, {
+          name: file.name,
+          hasContent: !!file.content,
+          hasChunks: !!file.chunks,
+          numChunks: file.chunks?.length
+        });
+      });
+    }
+
     console.log('Generating test with config:', config);
-    console.log('Content length:', content.length);
+    console.log('User:', user.email);
+    
+    // Format content for test generation
+    let formattedContent;
+    if (files && Array.isArray(files)) {
+      // If we have multiple files
+      formattedContent = files.map((file, index) => ({
+        content: file.content,
+        chunks: file.chunks || [],  // Include chunks if available
+        source: `File ${index + 1}: ${file.name}`
+      }));
+      console.log(`Processing ${formattedContent.length} files`);
+    } else if (content) {
+      // For single content, create chunks if not provided
+      const chunks = content.chunks || [];
+      formattedContent = [{
+        content: content.text || content,
+        chunks: chunks,
+        source: 'File 1'
+      }];
+      console.log('Processing single content source');
+    } else {
+      console.error('Invalid content format');
+      return res.status(400).json({ error: 'Invalid content format' });
+    }
+
+    // Log content sources for debugging
+    formattedContent.forEach((source, index) => {
+      console.log(`Source ${index + 1}: ${source.source}`);
+      console.log(`Content length: ${source.content?.length} characters`);
+      console.log(`Number of chunks: ${source.chunks?.length || 0}`);
+    });
     
     // Generate test questions
-    const test = await generateTest(content, {
+    const test = await generateTest(formattedContent, {
+      userId: user.id,
       numQuestions: config.numQuestions || 5,
       questionTypes: config.questionTypes || ['multiple_choice'],
       difficulty: config.difficulty || 'medium'
@@ -53,7 +111,8 @@ export default async function handler(req, res) {
       .from('tests')
       .insert([{
         user_id: user.id,
-        content: content,
+        title: config.title || `Test #${new Date().toISOString()}`,
+        content: JSON.stringify(formattedContent),
         questions: test.questions,
         config: config,
         created_at: new Date().toISOString()

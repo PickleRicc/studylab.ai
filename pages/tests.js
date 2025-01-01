@@ -14,6 +14,44 @@ export default function Tests() {
     loadTests();
   }, []);
 
+  const handleTestUpdate = async (updatedTest) => {
+    // Update the local state immediately for a snappy UI
+    setTests(prevTests => 
+      prevTests.map(test => test.id === updatedTest.id ? updatedTest : test)
+    );
+
+    try {
+      // Verify the update in the database
+      const { data, error } = await supabase
+        .from('tests')
+        .select('title')
+        .eq('id', updatedTest.id)
+        .single();
+
+      if (error) throw error;
+
+      // If the database title doesn't match, refresh the tests
+      if (data.title !== updatedTest.title) {
+        await loadTests();
+      }
+    } catch (error) {
+      console.error('Error verifying test update:', error);
+      // Refresh tests to ensure consistency
+      await loadTests();
+    }
+  };
+
+  const handleTestComplete = (testId, score) => {
+    // Update the local state with the new score
+    setTests(prevTests =>
+      prevTests.map(test =>
+        test.id === testId
+          ? { ...test, last_score: score }
+          : test
+      )
+    );
+  };
+
   const loadTests = async () => {
     try {
       // Get the current session
@@ -75,6 +113,7 @@ export default function Tests() {
                 key={test.id}
                 test={test}
                 onSelect={setSelectedTest}
+                onUpdate={handleTestUpdate}
               />
             ))}
           </div>
@@ -94,6 +133,7 @@ export default function Tests() {
         <InteractiveTest
           test={selectedTest}
           onClose={() => setSelectedTest(null)}
+          onTestComplete={handleTestComplete}
         />
       )}
     </div>

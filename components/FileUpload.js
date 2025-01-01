@@ -7,19 +7,16 @@ import { supabase } from '../utils/supabase'
 import TestConfigModal from './TestConfigModal'
 
 /**
- * A reusable file upload component that supports:
- * - Multiple file uploads
- * - Drag and drop functionality
- * - Progress tracking
- * - File type validation
- * - Error handling
+ * File upload component with drag and drop support
+ * @param {Object} props
+ * @param {Function} props.onSuccess - Callback when files are successfully uploaded
  */
 export default function FileUpload({ onSuccess }) {
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState(null)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [currentFile, setCurrentFile] = useState(null)
-    const [processedContent, setProcessedContent] = useState(null)
+    const [processedFiles, setProcessedFiles] = useState([])
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
 
     const uploadFiles = async (acceptedFiles) => {
@@ -28,7 +25,7 @@ export default function FileUpload({ onSuccess }) {
         setUploading(true)
         setError(null)
         setUploadProgress(0)
-        setProcessedContent(null)
+        setProcessedFiles([])
 
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -36,6 +33,7 @@ export default function FileUpload({ onSuccess }) {
 
             const results = []
             const totalFiles = acceptedFiles.length
+            const processedContents = []
 
             for (let i = 0; i < acceptedFiles.length; i++) {
                 const file = acceptedFiles[i]
@@ -67,7 +65,7 @@ export default function FileUpload({ onSuccess }) {
                 const data = await response.json()
                 results.push(data.file)
 
-                // Process the file (remaining 50% of progress for current file)
+                // Process the file
                 setUploadProgress(baseProgress + (75 / totalFiles))
                 const processResponse = await fetch('/api/process', {
                     method: 'POST',
@@ -90,13 +88,18 @@ export default function FileUpload({ onSuccess }) {
                     ...(processedData.info.format && { format: processedData.info.format })
                 })
 
-                // Store the processed content with chunks
-                setProcessedContent(processedData)
+                // Add to processed files array
+                processedContents.push({
+                    ...processedData,
+                    fileName: file.name
+                })
 
                 // Update progress for completed file
                 setUploadProgress(baseProgress + (100 / totalFiles))
             }
 
+            // Store all processed files
+            setProcessedFiles(processedContents)
             setUploadProgress(100)
             if (onSuccess) {
                 onSuccess(results)
@@ -110,33 +113,17 @@ export default function FileUpload({ onSuccess }) {
         }
     }
 
-    // Function to generate test from processed content
-    const generateTest = async (config) => {
-        if (!processedContent) {
-            setError('No processed content available for test generation')
-            return
-        }
-
+    const handleGenerateTest = async (config) => {
         try {
-            // Get the current session
-            const { data: { session } } = await supabase.auth.getSession()
+            if (processedFiles.length === 0) {
+                throw new Error('No content available to generate test');
+            }
+
+            // Get current session
+            const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                throw new Error('Not authenticated')
+                throw new Error('Not authenticated');
             }
-
-            console.log('ProcessedContent:', processedContent);
-            
-            // Ensure chunks exist and have pageContent
-            if (!processedContent.chunks || !Array.isArray(processedContent.chunks)) {
-                throw new Error('No valid chunks found in processed content');
-            }
-
-            // Combine all chunks into one text while preserving context
-            const combinedText = processedContent.chunks
-                .map(chunk => chunk.pageContent)
-                .join('\n\n');
-
-            console.log('Combined text length:', combinedText.length);
 
             const response = await fetch('/api/generate-test', {
                 method: 'POST',
@@ -145,32 +132,27 @@ export default function FileUpload({ onSuccess }) {
                     'Authorization': `Bearer ${session.access_token}`
                 },
                 body: JSON.stringify({
-                    content: combinedText,
-                    config: config
+                    files: processedFiles.map(file => ({
+                        content: file.text,
+                        chunks: file.chunks,
+                        name: file.fileName
+                    })),
+                    config
                 })
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to generate test');
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to generate test');
             }
 
-            const test = await response.json();
-            console.log('Generated test:', test);
-            return test;
+            const result = await response.json();
+            console.log('Test generated successfully:', result);
+            setIsConfigModalOpen(false);
+            return result;
         } catch (error) {
             console.error('Error generating test:', error);
-            setError(`Error generating test: ${error.message}`);
             throw error;
-        }
-    }
-
-    const handleGenerateTest = async (config) => {
-        try {
-            await generateTest(config)
-            // You might want to show a success message or redirect
-        } catch (error) {
-            setError(error.message)
         }
     }
 
@@ -247,7 +229,7 @@ export default function FileUpload({ onSuccess }) {
                     </div>
                 )}
             </div>
-            {processedContent && !uploading && (
+            {processedFiles.length > 0 && !uploading && (
                 <div className="mt-4">
                     <button
                         onClick={() => setIsConfigModalOpen(true)}

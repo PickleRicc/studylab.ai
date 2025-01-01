@@ -12,14 +12,14 @@ export async function splitTextIntoChunks(text, metadata = {}) {
   console.log('Metadata:', metadata);
 
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1000,
-    chunkOverlap: 200,
+    chunkSize: 2000,
+    chunkOverlap: 400,
     separators: ["\n\n", "\n", ".", "!", "?", ",", " ", ""],
   });
 
   console.log('Splitter configuration:', {
-    chunkSize: 1000,
-    chunkOverlap: 200,
+    chunkSize: 2000,
+    chunkOverlap: 400,
     separators: ["\n\n", "\n", ".", "!", "?", ",", " ", ""]
   });
 

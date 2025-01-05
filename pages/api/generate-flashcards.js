@@ -18,99 +18,111 @@ export default async function handler(req, res) {
       throw new Error('OpenAI API key is not configured');
     }
 
-    console.log('Received flashcard generation request');
-    
-    // Get auth token from header
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing authorization header' });
-    }
-
-    // Get the current user's session
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.split(' ')[1]
+    // Add timeout for the entire operation
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Operation timed out')), 50000)
     );
 
-    if (authError || !user) {
-      console.error('Authentication error:', authError);
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
+    const generationPromise = (async () => {
+      console.log('Received flashcard generation request');
+      
+      // Get auth token from header
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing authorization header' });
+      }
 
-    const { files, config } = req.body;
-    
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      console.error('No files provided');
-      return res.status(400).json({ error: 'No files provided' });
-    }
+      // Get the current user's session
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.split(' ')[1]
+      );
 
-    console.log('Processing files:', files.map(f => f.fileName || f.name));
+      if (authError || !user) {
+        console.error('Authentication error:', authError);
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
 
-    // Prepare content sources
-    const contentSources = files.map(file => ({
-      content: file.text || file.content,
-      source: file.fileName || file.name,
-      chunks: file.chunks
-    }));
+      const { files, config } = req.body;
+      
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        console.error('No files provided');
+        return res.status(400).json({ error: 'No files provided' });
+      }
 
-    console.log('Content sources prepared:', contentSources.length);
+      console.log('Processing files:', files.map(f => f.fileName || f.name));
 
-    // Generate flashcards
-    const { flashcards, totalCards } = await generateFlashcards(contentSources, config);
+      // Prepare content sources
+      const contentSources = files.map(file => ({
+        content: file.text || file.content,
+        source: file.fileName || file.name,
+        chunks: file.chunks
+      }));
 
-    console.log('Flashcards generated:', totalCards);
+      console.log('Content sources prepared:', contentSources.length);
 
-    if (!flashcards || flashcards.length === 0) {
-      throw new Error('No flashcards were generated');
-    }
+      // Generate flashcards
+      const { flashcards, totalCards } = await generateFlashcards(contentSources, config);
 
-    // Create flashcard set in database
-    const { data: flashcardSet, error: setError } = await supabase
-      .from('flashcard_sets')
-      .insert([{
-        user_id: user.id,
-        title: config.title || 'New Flashcard Set',
-        description: config.description,
-        source_file_id: files[0].id,
-        card_count: totalCards
-      }])
-      .select()
-      .single();
+      console.log('Flashcards generated:', totalCards);
 
-    if (setError) {
-      console.error('Error creating flashcard set:', setError);
-      throw setError;
-    }
+      if (!flashcards || flashcards.length === 0) {
+        throw new Error('No flashcards were generated');
+      }
 
-    console.log('Flashcard set created:', flashcardSet.id);
+      // Create flashcard set in database
+      const { data: flashcardSet, error: setError } = await supabase
+        .from('flashcard_sets')
+        .insert([{
+          user_id: user.id,
+          title: config.title || 'New Flashcard Set',
+          description: config.description,
+          source_file_id: files[0].id,
+          card_count: totalCards
+        }])
+        .select()
+        .single();
 
-    // Insert flashcards
-    const { error: cardsError } = await supabase
-      .from('flashcards')
-      .insert(flashcards.map(card => ({
-        set_id: flashcardSet.id,
-        front_content: card.front_content,
-        back_content: card.back_content,
-        position: card.position
-      })));
+      if (setError) {
+        console.error('Error creating flashcard set:', setError);
+        throw setError;
+      }
 
-    if (cardsError) {
-      console.error('Error inserting flashcards:', cardsError);
-      throw cardsError;
-    }
+      console.log('Flashcard set created:', flashcardSet.id);
 
-    console.log('Flashcards inserted successfully');
+      // Insert flashcards
+      const { error: cardsError } = await supabase
+        .from('flashcards')
+        .insert(flashcards.map(card => ({
+          set_id: flashcardSet.id,
+          front_content: card.front_content,
+          back_content: card.back_content,
+          position: card.position
+        })));
 
-    return res.status(200).json({
-      success: true,
-      flashcardSet,
-      totalCards
-    });
+      if (cardsError) {
+        console.error('Error inserting flashcards:', cardsError);
+        throw cardsError;
+      }
 
+      console.log('Flashcards inserted successfully');
+
+      return {
+        success: true,
+        flashcardSet,
+        totalCards
+      };
+    })();
+
+    const result = await Promise.race([generationPromise, timeoutPromise]);
+    return res.status(200).json(result);
   } catch (error) {
-    console.error('Error in flashcard generation:', error);
-    return res.status(500).json({
-      error: 'Failed to generate flashcards',
-      details: error.message
-    });
+    console.error('Error generating flashcards:', error);
+    // Send a proper JSON response even for errors
+    return res.status(error.message === 'Operation timed out' ? 504 : 500)
+      .json({ 
+        error: 'Error generating flashcards', 
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
   }
 }

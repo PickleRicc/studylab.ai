@@ -5,6 +5,7 @@ import { useDropzone } from 'react-dropzone'
 import { DocumentTextIcon, MusicalNoteIcon } from '@heroicons/react/24/outline'
 import { supabase } from '../utils/supabase'
 import TestConfigModal from './TestConfigModal'
+import FlashcardConfigModal from './FlashcardConfigModal'
 
 /**
  * File upload component with drag and drop support
@@ -17,7 +18,8 @@ export default function FileUpload({ onSuccess }) {
     const [uploadProgress, setUploadProgress] = useState(0)
     const [currentFile, setCurrentFile] = useState(null)
     const [processedFiles, setProcessedFiles] = useState([])
-    const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+    const [isTestConfigModalOpen, setIsTestConfigModalOpen] = useState(false)
+    const [isFlashcardConfigModalOpen, setIsFlashcardConfigModalOpen] = useState(false)
 
     const uploadFiles = async (acceptedFiles) => {
         if (acceptedFiles.length === 0) return
@@ -115,15 +117,8 @@ export default function FileUpload({ onSuccess }) {
 
     const handleGenerateTest = async (config) => {
         try {
-            if (processedFiles.length === 0) {
-                throw new Error('No content available to generate test');
-            }
-
-            // Get current session
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                throw new Error('Not authenticated');
-            }
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) throw new Error('Not authenticated')
 
             const response = await fetch('/api/generate-test', {
                 method: 'POST',
@@ -132,27 +127,49 @@ export default function FileUpload({ onSuccess }) {
                     'Authorization': `Bearer ${session.access_token}`
                 },
                 body: JSON.stringify({
-                    files: processedFiles.map(file => ({
-                        content: file.text,
-                        chunks: file.chunks,
-                        name: file.fileName
-                    })),
+                    files: processedFiles,
                     config
                 })
-            });
+            })
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || 'Failed to generate test');
-            }
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error)
 
-            const result = await response.json();
-            console.log('Test generated successfully:', result);
-            setIsConfigModalOpen(false);
-            return result;
+            onSuccess(result)
+            setIsTestConfigModalOpen(false)
+            return result
         } catch (error) {
-            console.error('Error generating test:', error);
-            throw error;
+            console.error('Error generating test:', error)
+            throw error
+        }
+    }
+
+    const handleGenerateFlashcards = async (config) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) throw new Error('Not authenticated')
+
+            const response = await fetch('/api/generate-flashcards', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({
+                    files: processedFiles,
+                    config
+                })
+            })
+
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error)
+
+            onSuccess(result)
+            setIsFlashcardConfigModalOpen(false)
+            return result
+        } catch (error) {
+            console.error('Error generating flashcards:', error)
+            throw error
         }
     }
 
@@ -230,24 +247,32 @@ export default function FileUpload({ onSuccess }) {
                 )}
             </div>
             {processedFiles.length > 0 && !uploading && (
-                <div className="mt-4">
+                <div className="mt-4 space-y-2">
                     <button
-                        onClick={() => setIsConfigModalOpen(true)}
-                        className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setIsTestConfigModalOpen(true)}
+                        className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Generate Test
+                    </button>
+                    <button
+                        onClick={() => setIsFlashcardConfigModalOpen(true)}
+                        className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Generate Flashcards
                     </button>
                 </div>
             )}
             <TestConfigModal
-                isOpen={isConfigModalOpen}
-                onClose={() => setIsConfigModalOpen(false)}
+                isOpen={isTestConfigModalOpen}
+                onClose={() => setIsTestConfigModalOpen(false)}
                 onGenerate={handleGenerateTest}
-                defaultConfig={{
-                    numQuestions: 5,
-                    questionTypes: ['multiple_choice'],
-                    difficulty: 'medium'
-                }}
+                selectedFiles={processedFiles}
+            />
+            <FlashcardConfigModal
+                isOpen={isFlashcardConfigModalOpen}
+                onClose={() => setIsFlashcardConfigModalOpen(false)}
+                onGenerate={handleGenerateFlashcards}
+                selectedFiles={processedFiles}
             />
         </div>
     )

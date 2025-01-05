@@ -3,7 +3,6 @@ import { useRouter } from 'next/router';
 import { supabase } from '../utils/supabase';
 import DashboardNav from '../components/DashboardNav';
 import FileUpload from '../components/FileUpload';
-import TestConfigModal from '../components/TestConfigModal';
 import { DocumentTextIcon, MusicalNoteIcon } from '@heroicons/react/24/outline';
 
 export default function Home() {
@@ -17,7 +16,6 @@ export default function Home() {
     flashcards: 0,
     files: 0
   });
-  const [showTestConfig, setShowTestConfig] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
 
   useEffect(() => {
@@ -55,9 +53,9 @@ export default function Home() {
         .select('*', { count: 'exact' })
         .eq('user_id', user.id);
 
-      // Get flashcard count
+      // Get flashcard set count
       const { count: flashcardCount } = await supabase
-        .from('flashcards')
+        .from('flashcard_sets')
         .select('*', { count: 'exact' })
         .eq('user_id', user.id);
 
@@ -115,59 +113,13 @@ export default function Home() {
     return <DocumentTextIcon className="h-6 w-6 text-gray-500" />;
   };
 
-  const handleFileUpload = async (uploadedFiles) => {
-    setSelectedFiles(uploadedFiles);
-    await fetchRecentFiles(); // Refresh the file list
-  };
-
-  const handleGenerateTest = async (config) => {
-    try {
-      if (!selectedFiles || selectedFiles.length === 0) {
-        throw new Error('Please upload at least one file first');
-      }
-
-      // Get file contents from selected files
-      const files = await Promise.all(selectedFiles.map(async (file) => {
-        try {
-          const response = await fetch(file.blob_url);
-          if (!response.ok) throw new Error(`Failed to fetch content for ${file.file_name}`);
-          const content = await response.text();
-          return {
-            content,
-            name: file.file_name
-          };
-        } catch (error) {
-          console.error(`Error fetching content for ${file.file_name}:`, error);
-          throw new Error(`Failed to process ${file.file_name}`);
-        }
-      }));
-
-      console.log(`Processing ${files.length} files for test generation`);
-
-      const response = await fetch('/api/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          files,
-          config
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to generate test');
-      }
-
-      setShowTestConfig(false);
-      await fetchStats(); // Update the stats
+  const handleFileUpload = async (result) => {
+    await fetchRecentFiles();
+    await fetchStats();
+    if (result.flashcardSet) {
+      router.push('/flashcards');
+    } else if (result.test) {
       router.push('/tests');
-    } catch (error) {
-      console.error('Error generating test:', error);
-      // You might want to show this error to the user
-      throw error;
     }
   };
 
@@ -188,14 +140,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-100">
       <DashboardNav />
-
-      {/* Test Config Modal */}
-      <TestConfigModal
-        isOpen={showTestConfig}
-        onClose={() => setShowTestConfig(false)}
-        onGenerate={handleGenerateTest}
-        defaultConfig={{}}
-      />
 
       <main className="py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -219,7 +163,7 @@ export default function Home() {
             </div>
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
-                <dt className="text-sm font-medium text-gray-500 truncate">Total Flashcards</dt>
+                <dt className="text-sm font-medium text-gray-500 truncate">Total Flashcard Sets</dt>
                 <dd className="mt-1 text-3xl font-semibold text-gray-900">{stats.flashcards}</dd>
               </div>
             </div>

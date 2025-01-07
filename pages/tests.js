@@ -3,8 +3,10 @@ import { supabase } from '../utils/supabase';
 import TestCard from '../components/TestCard';
 import InteractiveTest from '../components/InteractiveTest';
 import DashboardNav from '../components/DashboardNav';
+import { useRouter } from 'next/router';
 
 export default function Tests() {
+  const router = useRouter();
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +18,16 @@ export default function Tests() {
   useEffect(() => {
     loadTests();
   }, []);
+
+  useEffect(() => {
+    const { selected } = router.query;
+    if (selected && tests.length > 0) {
+      const test = tests.find(t => t.id === selected);
+      if (test) {
+        setSelectedTest(test);
+      }
+    }
+  }, [router.query, tests]);
 
   const handleTestUpdate = async (updatedTest) => {
     setTests(prevTests => 
@@ -102,11 +114,7 @@ export default function Tests() {
 
   const renderTabs = () => (
     <div className="flex space-x-2 mb-8">
-      {[
-        { id: 'recent', label: 'Recent Tests' },
-        { id: 'highScores', label: 'High Scores' },
-        { id: 'needsPractice', label: 'Needs Practice' }
-      ].map(tab => (
+      {[/* ... */].map(tab => (
         <button
           key={tab.id}
           onClick={() => {

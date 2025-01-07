@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 
-export default function FlashcardStudyView({ setId, onClose }) {
+export default function FlashcardStudyView({ set, onClose }) {
     const [flashcards, setFlashcards] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
@@ -15,15 +15,17 @@ export default function FlashcardStudyView({ setId, onClose }) {
     const [answeredCards, setAnsweredCards] = useState(new Set());
 
     useEffect(() => {
-        loadFlashcards();
-    }, [setId]);
+        if (set) {
+            loadFlashcards();
+        }
+    }, [set]);
 
     const loadFlashcards = async () => {
         try {
             const { data, error } = await supabase
                 .from('flashcards')
                 .select('*')
-                .eq('set_id', setId);
+                .eq('set_id', set.id);
 
             if (error) throw error;
 

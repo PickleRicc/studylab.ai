@@ -78,7 +78,9 @@ export default async function handler(req, res) {
         formattedContent = files.map((file, index) => ({
           content: file.content,
           chunks: file.chunks || [],  // Include chunks if available
-          source: `File ${index + 1}: ${file.name}`
+          source: file.isStored ? file.name : `File ${index + 1}: ${file.name}`,
+          isStored: !!file.isStored,
+          fileId: file.id
         }));
         console.log(`Processing ${formattedContent.length} files`);
       } else if (content) {
@@ -87,7 +89,9 @@ export default async function handler(req, res) {
         formattedContent = [{
           content: content.text || content,
           chunks: chunks,
-          source: 'File 1'
+          source: content.name || 'File 1',
+          isStored: !!content.isStored,
+          fileId: content.id
         }];
         console.log('Processing single content source');
       } else {
@@ -100,6 +104,9 @@ export default async function handler(req, res) {
         console.log(`Source ${index + 1}: ${source.source}`);
         console.log(`Content length: ${source.content?.length} characters`);
         console.log(`Number of chunks: ${source.chunks?.length || 0}`);
+        if (source.isStored) {
+          console.log(`Using stored file with ID: ${source.fileId}`);
+        }
       });
       
       // Generate test questions

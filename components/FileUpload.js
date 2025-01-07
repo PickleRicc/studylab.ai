@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { DocumentTextIcon, MusicalNoteIcon } from '@heroicons/react/24/outline'
+import { DocumentTextIcon, MusicalNoteIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { supabase } from '../utils/supabase'
 import TestConfigModal from './TestConfigModal'
 import FlashcardConfigModal from './FlashcardConfigModal'
@@ -20,6 +20,77 @@ export default function FileUpload({ onSuccess }) {
     const [processedFiles, setProcessedFiles] = useState([])
     const [isTestConfigModalOpen, setIsTestConfigModalOpen] = useState(false)
     const [isFlashcardConfigModalOpen, setIsFlashcardConfigModalOpen] = useState(false)
+    const [previousFiles, setPreviousFiles] = useState([])
+    const [selectedFiles, setSelectedFiles] = useState([])
+    const [showPreviousFiles, setShowPreviousFiles] = useState(false)
+    const [loadingStoredFile, setLoadingStoredFile] = useState(false)
+
+    useEffect(() => {
+        loadPreviousFiles()
+    }, [])
+
+    const loadPreviousFiles = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) return
+
+            const { data: files, error } = await supabase
+                .from('files')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .order('created_at', { ascending: false })
+
+            if (error) throw error
+            setPreviousFiles(files || [])
+        } catch (error) {
+            console.error('Error loading previous files:', error)
+            setError('Failed to load previous files')
+        }
+    }
+
+    const handleStoredFileSelect = async (file) => {
+        try {
+            setLoadingStoredFile(true);
+            setError(null);
+
+            // Get the current session
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                throw new Error('Not authenticated');
+            }
+
+            const response = await fetch('/api/fetch-stored-file', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ fileId: file.id })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch file content');
+            }
+
+            const data = await response.json();
+            
+            // Add to processed files
+            setProcessedFiles(prev => [...prev, {
+                ...data.file,
+                isStored: true
+            }]);
+
+            // Add to selected files
+            setSelectedFiles(prev => [...prev, file.id]);
+
+        } catch (error) {
+            console.error('Error fetching stored file:', error);
+            setError(error.message || 'Failed to load file content');
+        } finally {
+            setLoadingStoredFile(false);
+        }
+    };
 
     const uploadFiles = async (acceptedFiles) => {
         if (acceptedFiles.length === 0) return
@@ -184,68 +255,134 @@ export default function FileUpload({ onSuccess }) {
     })
 
     return (
-        <div className="w-full max-w-xl mx-auto">
-            <div
-                {...getRootProps()}
-                className={`p-8 border-2 border-dashed rounded-lg text-center transition-colors
-                    ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
-                    ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-                <input {...getInputProps()} />
-                <div className="flex justify-center mb-4">
-                    <DocumentTextIcon className="h-12 w-12 text-gray-400" />
-                    <MusicalNoteIcon className="h-12 w-12 text-gray-400 ml-2" />
+        <div className="space-y-4">
+            {error && (
+                <div className="p-4 text-red-700 bg-red-100 rounded-md">
+                    {error}
                 </div>
-                {isDragActive ? (
-                    <p className="text-blue-500">Drop your files here...</p>
-                ) : (
-                    <div>
-                        <p className="text-gray-600 mb-2">
-                            Drag and drop your files here
-                        </p>
-                        <button
-                            type="button"
-                            onClick={open}
-                            disabled={uploading}
-                            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Select Files
-                        </button>
-                        <p className="text-sm text-gray-500 mt-2">
-                            Supported formats: PDF, MP3, WAV, M4A
-                        </p>
-                    </div>
-                )}
-                {uploadProgress > 0 && (
-                    <div className="mt-4">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div
-                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                                style={{ width: `${uploadProgress}%` }}
-                            ></div>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2">
-                            {currentFile ? (
-                                `Processing: ${currentFile} (${Math.round(uploadProgress)}%)`
-                            ) : (
-                                `Overall Progress: ${Math.round(uploadProgress)}%`
-                            )}
-                        </p>
-                    </div>
-                )}
-                {uploading && (
-                    <div className="mt-4">
-                        <p className="text-blue-500">
-                            {currentFile ? `Processing ${currentFile}...` : 'Processing files...'}
-                        </p>
-                    </div>
-                )}
-                {error && (
-                    <div className="mt-4 text-red-500 text-sm">
-                        {error}
-                    </div>
-                )}
+            )}
+
+            <div className="flex space-x-4 mb-4">
+                <button
+                    onClick={() => setShowPreviousFiles(false)}
+                    className={`px-4 py-2 rounded-md ${!showPreviousFiles 
+                        ? 'bg-[#1d2937] text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                    Upload New
+                </button>
+                <button
+                    onClick={() => setShowPreviousFiles(true)}
+                    className={`px-4 py-2 rounded-md ${showPreviousFiles 
+                        ? 'bg-[#1d2937] text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                    Previous Files
+                </button>
             </div>
+
+            {showPreviousFiles ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {previousFiles.map((file) => (
+                        <div
+                            key={file.id}
+                            className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                                selectedFiles.includes(file.id)
+                                    ? 'border-[#1d2937] bg-[#1d2937]/5'
+                                    : 'border-gray-200 hover:border-[#1d2937]/50'
+                            }`}
+                            onClick={() => {
+                                if (!selectedFiles.includes(file.id)) {
+                                    handleStoredFileSelect(file)
+                                }
+                            }}
+                        >
+                            <div className="flex items-center space-x-3">
+                                {file.file_type === 'pdf' ? (
+                                    <DocumentTextIcon className="h-6 w-6 text-[#1d2937]" />
+                                ) : (
+                                    <MusicalNoteIcon className="h-6 w-6 text-[#1d2937]" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                        {file.file_name}
+                                    </p>
+                                    <p className="text-sm text-gray-500">
+                                        {(file.file_size / 1024).toFixed(1)} KB
+                                    </p>
+                                </div>
+                                {selectedFiles.includes(file.id) && (
+                                    <div className="flex-shrink-0">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            Selected
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                    <div
+                        {...getRootProps()}
+                        className={`p-8 border-2 border-dashed rounded-lg text-center transition-colors
+                            ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
+                            ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        <input {...getInputProps()} />
+                        <div className="flex justify-center mb-4">
+                            <DocumentTextIcon className="h-12 w-12 text-gray-400" />
+                            <MusicalNoteIcon className="h-12 w-12 text-gray-400 ml-2" />
+                        </div>
+                        {isDragActive ? (
+                            <p className="text-blue-500">Drop your files here...</p>
+                        ) : (
+                            <div>
+                                <p className="text-gray-600 mb-2">
+                                    Drag and drop your files here
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={open}
+                                    disabled={uploading}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Select Files
+                                </button>
+                                <p className="text-sm text-gray-500 mt-2">
+                                    Supported formats: PDF, MP3, WAV, M4A
+                                </p>
+                            </div>
+                        )}
+                        {uploadProgress > 0 && (
+                            <div className="mt-4">
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div
+                                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    ></div>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-2">
+                                    {currentFile ? (
+                                        `Processing: ${currentFile} (${Math.round(uploadProgress)}%)`
+                                    ) : (
+                                        `Overall Progress: ${Math.round(uploadProgress)}%`
+                                    )}
+                                </p>
+                            </div>
+                        )}
+                        {uploading && (
+                            <div className="mt-4">
+                                <p className="text-blue-500">
+                                    {currentFile ? `Processing ${currentFile}...` : 'Processing files...'}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {processedFiles.length > 0 && !uploading && (
                 <div className="mt-4 space-y-2">
                     <button
@@ -262,6 +399,7 @@ export default function FileUpload({ onSuccess }) {
                     </button>
                 </div>
             )}
+
             <TestConfigModal
                 isOpen={isTestConfigModalOpen}
                 onClose={() => setIsTestConfigModalOpen(false)}

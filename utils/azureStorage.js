@@ -1,4 +1,4 @@
-import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } from '@azure/storage-blob';
+import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol } from '@azure/storage-blob';
 
 /**
  * Azure Blob Storage utility functions for file operations
@@ -45,13 +45,17 @@ export class AzureStorageService {
      * @returns {Promise<{url: string, name: string, sasUrl: string}>}
      */
     async uploadFile(file, containerName, blobName = null, metadata = {}) {
+        console.log('Starting file upload to Azure...');
         const containerClient = this.blobServiceClient.getContainerClient(containerName);
         
         // Create container if it doesn't exist
         await containerClient.createIfNotExists();
+        console.log('Container exists or was created');
 
         // Generate unique blob name if not provided
         const uniqueBlobName = blobName || `${Date.now()}-${file.name}`;
+        console.log('Using blob name:', uniqueBlobName);
+        
         const blockBlobClient = containerClient.getBlockBlobClient(uniqueBlobName);
 
         // Upload file
@@ -61,9 +65,11 @@ export class AzureStorageService {
                 blobContentType: metadata.contentType
             }
         });
+        console.log('File uploaded successfully');
 
         // Generate SAS URL
         const sasUrl = await this.generateSasUrl(containerName, uniqueBlobName);
+        console.log('Generated SAS URL');
 
         return {
             url: blockBlobClient.url,
@@ -79,6 +85,23 @@ export class AzureStorageService {
      * @returns {Promise<string>} The SAS URL
      */
     async generateSasUrl(containerName, blobName) {
+        console.log('Generating SAS URL for:', { containerName, blobName });
+        
+        const containerClient = this.blobServiceClient.getContainerClient(containerName);
+        const blobClient = containerClient.getBlobClient(blobName);
+
+        // Verify the blob exists and get its properties
+        const exists = await blobClient.exists();
+        console.log('Blob exists:', exists);
+        
+        if (!exists) {
+            throw new Error('Blob does not exist');
+        }
+
+        // Get blob properties
+        const properties = await blobClient.getProperties();
+        console.log('Blob properties:', properties);
+
         const startsOn = new Date();
         const expiresOn = new Date(startsOn);
         expiresOn.setHours(startsOn.getHours() + 1);
@@ -88,17 +111,71 @@ export class AzureStorageService {
 
         const sasOptions = {
             containerName,
-            blobName,
+            blobName,  // Use original blobName without encoding
             permissions: permissions,
             startsOn,
             expiresOn,
+            contentType: properties.contentType || 'application/octet-stream',
+            cacheControl: properties.cacheControl,
+            contentDisposition: properties.contentDisposition || 'inline',
+            protocol: SASProtocol.Https
         };
 
+        console.log('SAS Options:', {
+            ...sasOptions,
+            permissions: permissions.toString(),
+        });
+
+        // Generate SAS token
         const sasToken = generateBlobSASQueryParameters(
             sasOptions,
             this.sharedKeyCredential
         ).toString();
 
-        return `https://${this.accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
+        // Use the blobClient.url which handles encoding correctly
+        const sasUrl = `${blobClient.url}?${sasToken}`;
+        console.log('Generated SAS URL length:', sasUrl.length);
+        
+        return sasUrl;
+    }
+
+    /**
+     * Download a blob directly using the Azure SDK
+     * @param {string} containerName - The container name
+     * @param {string} blobName - The blob name
+     * @returns {Promise<Buffer>} The file content as a buffer
+     */
+    async downloadBlob(containerName, blobName) {
+        console.log('Downloading blob:', { containerName, blobName });
+        
+        const containerClient = this.blobServiceClient.getContainerClient(containerName);
+        const blobClient = containerClient.getBlobClient(blobName);
+
+        // Verify the blob exists
+        const exists = await blobClient.exists();
+        console.log('Blob exists:', exists);
+        
+        if (!exists) {
+            throw new Error('Blob does not exist');
+        }
+
+        // Download the blob
+        const downloadResponse = await blobClient.download();
+        console.log('Blob download response:', {
+            contentLength: downloadResponse.contentLength,
+            contentType: downloadResponse.contentType
+        });
+
+        // Read the stream
+        const chunks = [];
+        for await (const chunk of downloadResponse.readableStreamBody) {
+            chunks.push(chunk);
+        }
+
+        // Combine chunks into a single buffer
+        const buffer = Buffer.concat(chunks);
+        console.log('Downloaded blob size:', buffer.length);
+
+        return buffer;
     }
 }

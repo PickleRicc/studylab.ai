@@ -4,8 +4,10 @@ import DashboardNav from '../components/DashboardNav';
 import FlashcardSetCard from '../components/FlashcardSetCard';
 import FlashcardStudyView from '../components/FlashcardStudyView';
 import FlashcardStudyReviewView from '../components/FlashcardStudyReviewView';
+import { useRouter } from 'next/router';
 
 export default function Flashcards() {
+  const router = useRouter();
   const [flashcardSets, setFlashcardSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,6 +19,17 @@ export default function Flashcards() {
     loadFlashcardSets();
   }, []);
 
+  useEffect(() => {
+    const { selected } = router.query;
+    if (selected && flashcardSets.length > 0) {
+      const set = flashcardSets.find(s => s.id === selected);
+      if (set) {
+        setSelectedSet(set);
+        setStudyMode(true);
+      }
+    }
+  }, [router.query, flashcardSets]);
+
   const loadFlashcardSets = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -26,15 +39,15 @@ export default function Flashcards() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: sets, error: setsError } = await supabase
         .from('flashcard_sets')
-        .select('*')
+        .select('*, flashcards(*)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (setsError) throw setsError;
 
-      setFlashcardSets(data || []);
+      setFlashcardSets(sets || []);
     } catch (err) {
       console.error('Error loading flashcard sets:', err);
       setError('Failed to load flashcard sets');
@@ -79,7 +92,7 @@ export default function Flashcards() {
   if (studyMode && selectedSet) {
     return (
       <FlashcardStudyView
-        setId={selectedSet}
+        set={selectedSet}
         onClose={() => {
           setSelectedSet(null);
           setStudyMode(false);

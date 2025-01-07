@@ -14,6 +14,8 @@ export default function Flashcards() {
   const [selectedSet, setSelectedSet] = useState(null);
   const [studyMode, setStudyMode] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newSetTitle, setNewSetTitle] = useState('');
 
   useEffect(() => {
     loadFlashcardSets();
@@ -89,82 +91,143 @@ export default function Flashcards() {
     setStudyMode(false);
   };
 
-  if (studyMode && selectedSet) {
-    return (
-      <FlashcardStudyView
-        set={selectedSet}
-        onClose={() => {
-          setSelectedSet(null);
-          setStudyMode(false);
-        }}
-      />
-    );
-  }
+  const handleSetSelect = (set) => {
+    setSelectedSet(set);
+    setStudyMode(true);
+    setReviewMode(false);
+  };
 
-  if (reviewMode && selectedSet) {
-    return (
-      <FlashcardStudyReviewView
-        setId={selectedSet}
-        onClose={() => {
-          setSelectedSet(null);
-          setReviewMode(false);
-        }}
-      />
-    );
-  }
+  const handleEditSet = (set) => {
+    // implement edit set functionality
+  };
 
-  if (loading) {
-    return (
-      <div>
-        <DashboardNav />
-        <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
-          <div className="container mx-auto px-6 py-12">
-            <div className="flex justify-center items-center h-64">
-              <div className="text-xl text-white/70">Loading flashcard sets...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleDeleteSet = (setId) => {
+    handleSetDelete(setId);
+  };
+
+  const handleCreateSet = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('flashcard_sets')
+        .insert([{ title: newSetTitle, user_id: supabase.auth.user().id }]);
+
+      if (error) throw error;
+
+      setFlashcardSets(prevSets => [...prevSets, data[0]]);
+      setShowCreateModal(false);
+      setNewSetTitle('');
+    } catch (err) {
+      console.error('Error creating flashcard set:', err);
+    }
+  };
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
       <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
-        <div className="container mx-auto px-6 py-12">
-          <div className="mb-12">
-            <h1 className="text-4xl font-bold text-white mb-4">My Flashcard Sets</h1>
-            <p className="text-white/70 text-lg">Create, study, and master your knowledge with flashcards.</p>
+      
+      <main className="container mx-auto px-4 py-8">
+        {error ? (
+          <div className="bg-white/10 backdrop-blur-xl rounded-xl p-4 text-red-400 border border-red-500/20">
+            {error}
           </div>
-          
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-8">
-              <p className="text-red-400">{error}</p>
-            </div>
-          )}
-          
-          {flashcardSets.length === 0 ? (
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-12 text-center">
-              <h3 className="text-2xl font-medium text-white mb-4">No Flashcard Sets Yet</h3>
-              <p className="text-white/70 mb-8">Start by creating your first flashcard set to begin studying!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {flashcardSets.map(set => (
-                <FlashcardSetCard
-                  key={set.id}
-                  set={set}
-                  onUpdate={handleSetUpdate}
-                  onDelete={handleSetDelete}
-                  onStudy={() => handleStudyClick(set.id)}
-                  onReview={() => handleReviewClick(set.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+        ) : loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+          </div>
+        ) : (
+          <>
+            {!studyMode && !reviewMode && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h1 className="text-3xl font-bold text-white">Flashcard Sets</h1>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
+                  >
+                    Create New Set
+                  </button>
+                </div>
+
+                {flashcardSets.length === 0 ? (
+                  <div className="bg-white/10 backdrop-blur-xl rounded-xl p-8 text-center border border-white/20">
+                    <h3 className="text-xl font-semibold text-white mb-4">No Flashcard Sets Yet</h3>
+                    <p className="text-gray-300 mb-6">Create your first set to start studying!</p>
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
+                    >
+                      Create New Set
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {flashcardSets.map((set) => (
+                      <FlashcardSetCard
+                        key={set.id}
+                        set={set}
+                        onStudy={() => handleSetSelect(set)}
+                        onEdit={() => handleEditSet(set)}
+                        onDelete={() => handleDeleteSet(set.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {studyMode && selectedSet && (
+              <FlashcardStudyView
+                set={selectedSet}
+                onClose={() => {
+                  setSelectedSet(null);
+                  setStudyMode(false);
+                  router.push('/flashcards', undefined, { shallow: true });
+                }}
+              />
+            )}
+
+            {reviewMode && selectedSet && (
+              <FlashcardStudyReviewView
+                set={selectedSet}
+                onClose={() => {
+                  setSelectedSet(null);
+                  setReviewMode(false);
+                }}
+              />
+            )}
+
+            {showCreateModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full border border-white/20">
+                  <h3 className="text-xl font-semibold text-white mb-4">Create New Flashcard Set</h3>
+                  <input
+                    type="text"
+                    placeholder="Set Title"
+                    value={newSetTitle}
+                    onChange={(e) => setNewSetTitle(e.target.value)}
+                    className="w-full p-3 mb-4 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => setShowCreateModal(false)}
+                      className="px-4 py-2 text-gray-300 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateSet}
+                      disabled={!newSetTitle.trim()}
+                      className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }

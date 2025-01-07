@@ -1,116 +1,27 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
-import { StarIcon } from '@heroicons/react/24/outline';
-import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
+import { useState } from 'react';
+import { StarIcon } from '@heroicons/react/24/solid';
 
-export default function InteractiveTest({ test, onClose, onTestComplete, starredOnly = false }) {
+export default function StarredQuestionsReview({ test, onClose }) {
     const [answers, setAnswers] = useState({});
     const [submitted, setSubmitted] = useState(false);
     const [score, setScore] = useState(null);
-    const [bestScore, setBestScore] = useState(null);
-    const [attemptHistory, setAttemptHistory] = useState([]);
-    const [starredQuestions, setStarredQuestions] = useState({});
-    const [displayQuestions, setDisplayQuestions] = useState([]);
 
-    useEffect(() => {
-        fetchTestHistory();
-        fetchStarredQuestions();
-    }, [test.id]);
-
-    useEffect(() => {
-        if (test?.questions) {
-            if (starredOnly) {
-                // Filter questions to only show starred ones
-                const filteredQuestions = test.questions.filter((_, index) => starredQuestions[index]);
-                setDisplayQuestions(filteredQuestions);
-            } else {
-                setDisplayQuestions(test.questions);
-            }
-        }
-    }, [test.questions, starredQuestions, starredOnly]);
-
-    const fetchTestHistory = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('test_attempts')
-                .select('score')
-                .eq('test_id', test.id)
-                .order('score', { ascending: false });
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                setBestScore(data[0].score);
-                setAttemptHistory(data);
-            }
-        } catch (error) {
-            console.error('Error fetching test history:', error);
-        }
-    };
-
-    const fetchStarredQuestions = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('starred_questions')
-                .select('*')
-                .eq('test_id', test.id);
-
-            if (error) throw error;
-
-            const starredMap = {};
-            data.forEach(item => {
-                starredMap[item.question_index] = true;
-            });
-            setStarredQuestions(starredMap);
-        } catch (error) {
-            console.error('Error fetching starred questions:', error);
-        }
-    };
-
-    const handleStarQuestion = async (questionIndex) => {
-        const question = test.questions[questionIndex];
-        const isCurrentlyStarred = starredQuestions[questionIndex];
-
-        try {
-            if (isCurrentlyStarred) {
-                // Remove star
-                const { error } = await supabase
-                    .from('starred_questions')
-                    .delete()
-                    .eq('test_id', test.id)
-                    .eq('question_index', questionIndex);
-
-                if (error) throw error;
-
-                setStarredQuestions(prev => {
-                    const updated = { ...prev };
-                    delete updated[questionIndex];
-                    return updated;
-                });
-            } else {
-                // Add star
-                const { error } = await supabase
-                    .from('starred_questions')
-                    .insert({
-                        test_id: test.id,
-                        question_index: questionIndex,
-                        question_text: question.question,
-                        correct_answer: question.correctAnswer,
-                        question_type: question.type,
-                        options: question.options
-                    });
-
-                if (error) throw error;
-
-                setStarredQuestions(prev => ({
-                    ...prev,
-                    [questionIndex]: true
-                }));
-            }
-        } catch (error) {
-            console.error('Error updating starred question:', error);
-        }
-    };
+    if (!test || !test.questions || test.questions.length === 0) {
+        return (
+            <div className="fixed inset-0 bg-gradient-to-br from-[#1d2937] to-gray-900 flex items-center justify-center p-4">
+                <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-8 max-w-md w-full border border-white/20">
+                    <h3 className="text-2xl font-bold text-white mb-4">No Questions Available</h3>
+                    <p className="text-gray-300 mb-6">There are no starred questions available for review.</p>
+                    <button
+                        onClick={onClose}
+                        className="w-full px-6 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                    >
+                        Return to Tests
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     const handleAnswerChange = (questionIndex, answer) => {
         setAnswers(prev => ({
@@ -127,8 +38,6 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                     correct++;
                 }
             } else if (question.type === 'short_answer') {
-                // For short answers, we'll do a simple case-insensitive comparison
-                // You might want to implement more sophisticated answer checking
                 if (answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()) {
                     correct++;
                 }
@@ -137,45 +46,10 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
         return Math.round((correct / test.questions.length) * 100);
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         const finalScore = calculateScore();
         setScore(finalScore);
         setSubmitted(true);
-
-        try {
-            // Save the attempt in test_attempts table
-            const { error: attemptError } = await supabase
-                .from('test_attempts')
-                .insert({
-                    test_id: test.id,
-                    score: finalScore,
-                    answers: answers,
-                    attempted_at: new Date().toISOString()
-                });
-
-            if (attemptError) throw attemptError;
-
-            // Update the test's last score and best score
-            const { error: updateError } = await supabase
-                .from('tests')
-                .update({ 
-                    last_score: finalScore,
-                    best_score: bestScore === null ? finalScore : Math.max(finalScore, bestScore)
-                })
-                .eq('id', test.id);
-
-            if (updateError) throw updateError;
-
-            // Refresh test history
-            await fetchTestHistory();
-
-            // Notify parent component of test completion without closing
-            if (onTestComplete) {
-                onTestComplete(test.id, finalScore, false); // Added false parameter to prevent auto-closing
-            }
-        } catch (error) {
-            console.error('Error saving test score:', error);
-        }
     };
 
     const handleReset = () => {
@@ -191,7 +65,8 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                     <div className="flex justify-between items-center p-6 border-b border-white/10 sticky top-0 bg-[#1d2937]/80 backdrop-blur-xl z-10">
                         <div>
                             <h2 className="text-2xl font-bold text-white flex items-center">
-                                {test.title || `Test #${test.id}`}
+                                <StarIcon className="h-6 w-6 text-yellow-400 mr-2" />
+                                {test.title || `Test #${test.id}`} - Starred Questions
                             </h2>
                             <p className="text-gray-300 mt-1">
                                 {test.questions.length} questions
@@ -215,17 +90,23 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
-                                <h2 className="text-3xl font-bold text-white mb-2">Test Complete!</h2>
+                                <h2 className="text-3xl font-bold text-white mb-2">Review Complete!</h2>
                                 <p className="text-gray-300 text-lg">
                                     Your Score: {score}%
                                 </p>
                             </div>
                             <div className="space-y-3">
                                 <button
+                                    onClick={handleReset}
+                                    className="w-full px-6 py-3 bg-white/10 backdrop-blur-xl text-white border-2 border-white/30 rounded-xl hover:bg-white/20 transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                                >
+                                    Try Again
+                                </button>
+                                <button
                                     onClick={onClose}
                                     className="w-full px-6 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium"
                                 >
-                                    Close Test
+                                    Close Review
                                 </button>
                             </div>
                         </div>
@@ -233,22 +114,10 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                         <div className="p-6 space-y-6">
                             {test.questions.map((question, index) => (
                                 <div key={index} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <p className="text-lg font-medium text-white flex items-start flex-1">
-                                            <span className="mr-3 text-gray-400">{index + 1}.</span>
-                                            <span>{question.question}</span>
-                                        </p>
-                                        <button
-                                            onClick={() => handleStarQuestion(index)}
-                                            className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
-                                        >
-                                            {starredQuestions[index] ? (
-                                                <StarIconSolid className="h-5 w-5 text-yellow-400" />
-                                            ) : (
-                                                <StarIcon className="h-5 w-5" />
-                                            )}
-                                        </button>
-                                    </div>
+                                    <p className="text-lg font-medium text-white mb-4 flex items-start">
+                                        <span className="mr-3 text-gray-400">{index + 1}.</span>
+                                        <span>{question.question}</span>
+                                    </p>
 
                                     {question.type === 'multiple_choice' ? (
                                         <div className="space-y-3">
@@ -261,6 +130,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                                         type="radio"
                                                         name={`question-${index}`}
                                                         value={choice}
+                                                        checked={answers[index] === choice}
                                                         onChange={(e) => handleAnswerChange(index, e.target.value)}
                                                         disabled={submitted}
                                                         className="form-radio text-blue-500 border-white/30 focus:ring-blue-500 focus:ring-offset-0 bg-transparent"
@@ -274,8 +144,9 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                     ) : (
                                         <input
                                             type="text"
-                                            placeholder="Type your answer..."
+                                            value={answers[index] || ''}
                                             onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                            placeholder="Type your answer..."
                                             disabled={submitted}
                                             className="w-full p-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         />
@@ -303,7 +174,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                 onClick={handleSubmit}
                                 className="w-full mt-8 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
                             >
-                                Submit Test
+                                Check Answers
                             </button>
                         </div>
                     )}

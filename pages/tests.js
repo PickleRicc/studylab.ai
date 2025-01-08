@@ -146,9 +146,9 @@ export default function Tests() {
 
     if (tests.length === 0) {
       return (
-        <div className="bg-gray-800 rounded-lg p-8 text-center">
+        <div className="bg-[#560bad]/30 backdrop-blur-xl rounded-lg p-8 text-center border border-white/20">
           <h3 className="text-lg font-medium text-white mb-2">No Tests Created</h3>
-          <p className="text-gray-300">Start by uploading study material to generate tests.</p>
+          <p className="text-white/80">Start by uploading study material to generate tests.</p>
         </div>
       );
     }
@@ -167,8 +167,8 @@ export default function Tests() {
             onClick={() => setActiveTab('recent')}
             className={`px-4 py-2 rounded-lg transition-all ${
               activeTab === 'recent'
-                ? 'bg-white/20 text-white'
-                : 'text-gray-300 hover:bg-white/10'
+                ? 'bg-[#4361ee] text-white'
+                : 'text-white/80 hover:bg-[#4895ef]/20'
             }`}
           >
             Recent
@@ -177,8 +177,8 @@ export default function Tests() {
             onClick={() => setActiveTab('starred')}
             className={`px-4 py-2 rounded-lg transition-all ${
               activeTab === 'starred'
-                ? 'bg-white/20 text-white'
-                : 'text-gray-300 hover:bg-white/10'
+                ? 'bg-[#4361ee] text-white'
+                : 'text-white/80 hover:bg-[#4895ef]/20'
             }`}
           >
             Starred
@@ -204,8 +204,8 @@ export default function Tests() {
                 onClick={() => setCurrentPage(index + 1)}
                 className={`px-3 py-1 rounded-lg transition-all ${
                   currentPage === index + 1
-                    ? 'bg-white/20 text-white'
-                    : 'text-gray-300 hover:bg-white/10'
+                    ? 'bg-[#4361ee] text-white'
+                    : 'text-white/80 hover:bg-[#4895ef]/20'
                 }`}
               >
                 {index + 1}
@@ -218,12 +218,12 @@ export default function Tests() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
       <DashboardNav />
       <div className="container mx-auto px-6 py-12">
         <div className="mb-12">
           <h1 className="text-4xl font-bold text-white mb-4">My Tests</h1>
-          <p className="text-gray-300 text-lg">Generate and take tests to assess your knowledge.</p>
+          <p className="text-white/90 text-lg">Generate and take tests to assess your knowledge.</p>
         </div>
         {selectedTest && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

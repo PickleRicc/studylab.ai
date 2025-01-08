@@ -122,7 +122,7 @@ export default function Flashcards() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
       <DashboardNav />
       
       <main className="container mx-auto px-4 py-8">

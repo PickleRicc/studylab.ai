@@ -38,7 +38,7 @@ export default function DashboardNav() {
     }
 
     return (
-        <nav className="bg-gray-800">
+        <nav className="bg-[#3a0ca3] shadow-lg">
             <div className="max-w-7xl mx-auto">
                 <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center">
@@ -49,31 +49,31 @@ export default function DashboardNav() {
                             <div className="flex items-baseline space-x-4">
                                 <Link
                                     href="/dashboard"
-                                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    className="text-white/80 hover:bg-[#4361ee] hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                                 >
                                     Dashboard
                                 </Link>
                                 <Link
                                     href="/tests"
-                                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    className="text-white/80 hover:bg-[#4361ee] hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                                 >
                                     Tests
                                 </Link>
                                 <Link
                                     href="/files"
-                                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    className="text-white/80 hover:bg-[#4361ee] hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                                 >
                                     Files
                                 </Link>
                                 <Link
                                     href="/flashcards"
-                                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    className="text-white/80 hover:bg-[#4361ee] hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                                 >
                                     Flashcards
                                 </Link>
                                 <Link
                                     href="/profile"
-                                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    className="text-white/80 hover:bg-[#4361ee] hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                                 >
                                     Profile
                                 </Link>
@@ -81,10 +81,10 @@ export default function DashboardNav() {
                         </div>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <span className="text-gray-300 text-sm">{userName}</span>
+                        <span className="text-white/80 text-sm">{userName}</span>
                         <button
                             onClick={() => supabase.auth.signOut()}
-                            className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm font-medium"
+                            className="bg-[#560bad] hover:bg-[#4a0ca3] text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
                         >
                             Sign Out
                         </button>
@@ -92,35 +92,35 @@ export default function DashboardNav() {
                 </div>
             </div>
             {/* Mobile menu */}
-            <div className="md:hidden border-t border-gray-700">
+            <div className="md:hidden border-t border-white/10">
                 <div className="px-2 py-3 space-y-1">
                     <Link
                         href="/dashboard"
-                        className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                        className="text-white/80 hover:bg-[#4361ee] hover:text-white block px-3 py-2 rounded-md text-base font-medium transition-all duration-200"
                     >
                         Dashboard
                     </Link>
                     <Link
                         href="/tests"
-                        className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                        className="text-white/80 hover:bg-[#4361ee] hover:text-white block px-3 py-2 rounded-md text-base font-medium transition-all duration-200"
                     >
                         Tests
                     </Link>
                     <Link
                         href="/files"
-                        className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                        className="text-white/80 hover:bg-[#4361ee] hover:text-white block px-3 py-2 rounded-md text-base font-medium transition-all duration-200"
                     >
                         Files
                     </Link>
                     <Link
                         href="/flashcards"
-                        className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                        className="text-white/80 hover:bg-[#4361ee] hover:text-white block px-3 py-2 rounded-md text-base font-medium transition-all duration-200"
                     >
                         Flashcards
                     </Link>
                     <Link
                         href="/profile"
-                        className="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                        className="text-white/80 hover:bg-[#4361ee] hover:text-white block px-3 py-2 rounded-md text-base font-medium transition-all duration-200"
                     >
                         Profile
                     </Link>

@@ -90,48 +90,33 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
                 if (error) throw error;
 
-                // Only update state if database operation was successful
                 setStarredQuestions(prev => {
                     const updated = { ...prev };
                     delete updated[questionIndex];
                     return updated;
                 });
             } else {
-                // Check if the question is already starred in the database
-                const { data: existingStars, error: checkError } = await supabase
+                // Add star
+                const { error } = await supabase
                     .from('starred_questions')
-                    .select('*')
-                    .eq('test_id', test.id)
-                    .eq('question_index', questionIndex);
+                    .insert({
+                        test_id: test.id,
+                        question_index: questionIndex,
+                        question_text: question.question,
+                        correct_answer: question.correctAnswer,
+                        question_type: question.type,
+                        options: question.options
+                    });
 
-                if (checkError) throw checkError;
+                if (error) throw error;
 
-                // Only insert if not already starred
-                if (!existingStars || existingStars.length === 0) {
-                    const { error } = await supabase
-                        .from('starred_questions')
-                        .insert({
-                            test_id: test.id,
-                            question_index: questionIndex,
-                            question_text: question.question,
-                            correct_answer: question.correctAnswer,
-                            question_type: question.type,
-                            options: question.options
-                        });
-
-                    if (error) throw error;
-
-                    // Only update state if database operation was successful
-                    setStarredQuestions(prev => ({
-                        ...prev,
-                        [questionIndex]: true
-                    }));
-                }
+                setStarredQuestions(prev => ({
+                    ...prev,
+                    [questionIndex]: true
+                }));
             }
         } catch (error) {
             console.error('Error updating starred question:', error);
-            // Refresh starred questions from database on error to ensure consistency
-            fetchStarredQuestions();
         }
     };
 
@@ -194,12 +179,12 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
             // Refresh test history
             await fetchTestHistory();
 
-            // Call onTestComplete with the updated score
+            // Notify parent component of test completion without closing
             if (onTestComplete) {
-                onTestComplete(test.id, finalScore);
+                onTestComplete(test.id, finalScore, false);
             }
         } catch (error) {
-            console.error('Error saving test attempt:', error);
+            console.error('Error saving test score:', error);
         }
     };
 
@@ -217,27 +202,27 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
     };
 
     return (
-        <div className="fixed inset-0 bg-gradient-to-br from-[#1d2937] to-gray-900 overflow-hidden">
+        <div className="fixed inset-0 bg-gradient-to-br from-[#10002b] to-[#240046] overflow-hidden">
             <div className="h-full w-full overflow-auto p-4">
-                <div className="relative bg-white/10 backdrop-blur-xl rounded-2xl w-full max-w-4xl mx-auto mb-8 overflow-hidden border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.3)]">
-                    <div className="flex justify-between items-center p-6 border-b border-white/10 sticky top-0 bg-[#1d2937]/80 backdrop-blur-xl z-10">
+                <div className="relative bg-[#240046]/80 backdrop-blur-xl rounded-2xl w-full max-w-4xl mx-auto mb-8 overflow-hidden border border-[#3c096c] shadow-[0_8px_32px_0_rgba(31,38,135,0.3)]">
+                    <div className="flex justify-between items-center p-6 border-b border-[#3c096c] sticky top-0 bg-[#240046]/80 backdrop-blur-xl z-10">
                         <div>
                             <h2 className="text-2xl font-bold text-white flex items-center">
                                 {test.title || `Test #${test.id}`}
                             </h2>
-                            <p className="text-gray-300 mt-1">
+                            <p className="text-white/80 mt-1">
                                 {mode === 'starred' ? `${displayQuestions.length} starred questions` : `${test.questions.length} questions`}
                             </p>
                         </div>
                         <div className="flex items-center space-x-4">
                             {!submitted && (
-                                <div className="flex rounded-lg overflow-hidden border border-white/20">
+                                <div className="flex rounded-lg overflow-hidden border border-[#3c096c]">
                                     <button
                                         onClick={() => handleModeChange('all')}
                                         className={`px-4 py-2 text-sm transition-all ${
                                             mode === 'all'
-                                                ? 'bg-white/20 text-white'
-                                                : 'text-gray-300 hover:bg-white/10'
+                                                ? 'bg-[#4361ee] text-white'
+                                                : 'text-white/80 hover:bg-[#3c096c]'
                                         }`}
                                     >
                                         All Questions
@@ -246,8 +231,8 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                         onClick={() => handleModeChange('starred')}
                                         className={`px-4 py-2 text-sm transition-all ${
                                             mode === 'starred'
-                                                ? 'bg-white/20 text-white'
-                                                : 'text-gray-300 hover:bg-white/10'
+                                                ? 'bg-[#4361ee] text-white'
+                                                : 'text-white/80 hover:bg-[#3c096c]'
                                         }`}
                                     >
                                         Starred Only
@@ -256,7 +241,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                             )}
                             <button
                                 onClick={onClose}
-                                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-all"
+                                className="text-white/80 hover:text-[#4cc9f0] p-2 rounded-lg hover:bg-[#3c096c] transition-all"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -268,23 +253,23 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                     {submitted ? (
                         <div className="p-6 space-y-6">
                             {/* Score Summary Section */}
-                            <div ref={scoreRef} className="bg-white/10 backdrop-blur-xl rounded-xl p-6 border border-white/20">
+                            <div ref={scoreRef} className="bg-[#3c096c]/20 backdrop-blur-xl rounded-xl p-6 border border-[#3c096c]">
                                 <div className="text-center mb-6">
                                     {isNewHighScore && (
                                         <div className="animate-bounce mb-4">
-                                            <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-yellow-500/20 text-yellow-400 text-sm font-medium">
+                                            <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-[#4cc9f0]/20 text-[#4cc9f0] text-sm font-medium">
                                                 🏆 New High Score!
                                             </div>
                                         </div>
                                     )}
                                     <h2 className="text-3xl font-bold text-white mb-2">Test Complete!</h2>
-                                    <p className="text-gray-300 text-lg mb-2">
+                                    <p className="text-lg text-white/80 mb-2">
                                         Your Score: {score}%
                                         {mode === 'starred' && <span className="text-sm ml-2">(Starred Questions Only)</span>}
                                     </p>
-                                    <p className="text-gray-400 text-sm">
+                                    <p className="text-sm text-white/60">
                                         {isNewHighScore ? (
-                                            <span className="text-yellow-400">Previous Best: {bestScore || 0}%</span>
+                                            <span className="text-[#4cc9f0]">Previous Best: {bestScore || 0}%</span>
                                         ) : (
                                             bestScore && `Personal Best: ${bestScore}%`
                                         )}
@@ -293,13 +278,13 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                 <div className="flex space-x-3">
                                     <button
                                         onClick={handleReset}
-                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                                        className="flex-1 px-6 py-3 bg-[#4361ee] text-white rounded-xl hover:bg-[#4cc9f0] transform hover:scale-[1.02] transition-all duration-200 font-medium"
                                     >
                                         Retake Test
                                     </button>
                                     <button
                                         onClick={onClose}
-                                        className="flex-1 px-6 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                                        className="flex-1 px-6 py-3 bg-[#3c096c] text-white rounded-xl hover:bg-[#4361ee] transform hover:scale-[1.02] transition-all duration-200 font-medium"
                                     >
                                         Close Test
                                     </button>
@@ -311,18 +296,18 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                 {displayQuestions.map((question, index) => {
                                     const originalIndex = test.questions.findIndex(q => q.question === question.question);
                                     return (
-                                    <div key={originalIndex} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
+                                    <div key={originalIndex} className="bg-[#3c096c]/20 backdrop-blur-xl rounded-xl p-6 border border-[#3c096c]">
                                         <div className="flex justify-between items-start mb-4">
                                             <p className="text-lg font-medium text-white flex items-start flex-1">
-                                                <span className="mr-3 text-gray-400">{index + 1}.</span>
+                                                <span className="mr-3 text-white/60">{index + 1}.</span>
                                                 <span>{question.question}</span>
                                             </p>
                                             <button
                                                 onClick={() => handleStarQuestion(originalIndex)}
-                                                className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
+                                                className="ml-4 text-white/80 hover:text-[#4cc9f0] transition-colors"
                                             >
                                                 {starredQuestions[originalIndex] ? (
-                                                    <StarIconSolid className="h-5 w-5 text-yellow-400" />
+                                                    <StarIconSolid className="h-5 w-5 text-[#4cc9f0]" />
                                                 ) : (
                                                     <StarIcon className="h-5 w-5" />
                                                 )}
@@ -345,16 +330,16 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                                         : '✗ Incorrect'}
                                                 </span>
                                             </div>
-                                            <p className="text-base text-gray-300">
-                                                <span className="text-gray-400">Your answer: </span>
+                                            <p className="text-base text-white/60">
+                                                <span className="text-white/60">Your answer: </span>
                                                 {answers[originalIndex] ? (
                                                     question.type === 'multiple_choice'
                                                         ? `${String.fromCharCode(65 + question.options.indexOf(answers[originalIndex]))}. ${answers[originalIndex]}`
                                                         : answers[originalIndex]
                                                 ) : 'Not answered'}
                                             </p>
-                                            <p className="text-base text-gray-300 mt-1">
-                                                <span className="text-gray-400">Correct answer: </span>
+                                            <p className="text-base text-white/60 mt-1">
+                                                <span className="text-white/60">Correct answer: </span>
                                                 {question.type === 'multiple_choice'
                                                     ? `${String.fromCharCode(65 + question.options.indexOf(question.correctAnswer))}. ${question.correctAnswer}`
                                                     : question.correctAnswer}
@@ -369,18 +354,18 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                             {displayQuestions.map((question, index) => {
                                 const originalIndex = test.questions.findIndex(q => q.question === question.question);
                                 return (
-                                <div key={originalIndex} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
+                                <div key={originalIndex} className="bg-[#3c096c]/20 backdrop-blur-xl rounded-xl p-6 border border-[#3c096c]">
                                     <div className="flex justify-between items-start mb-4">
                                         <p className="text-lg font-medium text-white flex items-start flex-1">
-                                            <span className="mr-3 text-gray-400">{index + 1}.</span>
+                                            <span className="mr-3 text-white/60">{index + 1}.</span>
                                             <span>{question.question}</span>
                                         </p>
                                         <button
                                             onClick={() => handleStarQuestion(originalIndex)}
-                                            className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
+                                            className="ml-4 text-white/80 hover:text-[#4cc9f0] transition-colors"
                                         >
                                             {starredQuestions[originalIndex] ? (
-                                                <StarIconSolid className="h-5 w-5 text-yellow-400" />
+                                                <StarIconSolid className="h-5 w-5 text-[#4cc9f0]" />
                                             ) : (
                                                 <StarIcon className="h-5 w-5" />
                                             )}
@@ -392,7 +377,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                             {question.options?.map((choice, choiceIndex) => (
                                                 <label
                                                     key={choiceIndex}
-                                                    className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-all"
+                                                    className="flex items-center space-x-3 p-3 rounded-lg hover:bg-[#3c096c]/40 cursor-pointer transition-all"
                                                 >
                                                     <input
                                                         type="radio"
@@ -400,9 +385,9 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                                         value={choice}
                                                         onChange={(e) => handleAnswerChange(originalIndex, e.target.value)}
                                                         disabled={submitted}
-                                                        className="form-radio text-blue-500 border-white/30 focus:ring-blue-500 focus:ring-offset-0 bg-transparent"
+                                                        className="form-radio text-[#4361ee] border-white/30 focus:ring-[#4361ee] focus:ring-offset-0 bg-transparent"
                                                     />
-                                                    <span className="text-gray-200">
+                                                    <span className="text-white/80">
                                                         {String.fromCharCode(65 + choiceIndex)}. {choice}
                                                     </span>
                                                 </label>
@@ -414,7 +399,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                             placeholder="Type your answer..."
                                             onChange={(e) => handleAnswerChange(originalIndex, e.target.value)}
                                             disabled={submitted}
-                                            className="w-full p-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            className="w-full p-3 bg-[#3c096c]/20 border border-[#3c096c] rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-[#4361ee] focus:border-transparent"
                                         />
                                     )}
 
@@ -436,16 +421,16 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                                             : '✗ Incorrect'}
                                                     </span>
                                                 </div>
-                                                <p className="text-base text-gray-300">
-                                                    <span className="text-gray-400">Your answer: </span>
+                                                <p className="text-base text-white/60">
+                                                    <span className="text-white/60">Your answer: </span>
                                                     {answers[originalIndex] ? (
                                                         question.type === 'multiple_choice'
                                                             ? `${String.fromCharCode(65 + question.options.indexOf(answers[originalIndex]))}. ${answers[originalIndex]}`
                                                             : answers[originalIndex]
                                                     ) : 'Not answered'}
                                                 </p>
-                                                <p className="text-base text-gray-300 mt-1">
-                                                    <span className="text-gray-400">Correct answer: </span>
+                                                <p className="text-base text-white/60 mt-1">
+                                                    <span className="text-white/60">Correct answer: </span>
                                                     {question.type === 'multiple_choice'
                                                         ? `${String.fromCharCode(65 + question.options.indexOf(question.correctAnswer))}. ${question.correctAnswer}`
                                                         : question.correctAnswer}
@@ -458,7 +443,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
                             <button
                                 onClick={handleSubmit}
-                                className="w-full mt-8 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
+                                className="w-full mt-8 px-6 py-3 bg-[#4361ee] text-white rounded-xl hover:bg-[#4cc9f0] transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-[#4361ee]/25"
                             >
                                 Submit Test
                             </button>

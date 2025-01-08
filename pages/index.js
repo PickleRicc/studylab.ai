@@ -145,7 +145,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
         </div>
@@ -158,7 +158,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1d2937] to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
       <DashboardNav />
       {selectedTest ? (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

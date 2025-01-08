@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --grape: #7209b7;
+  --chrysler-blue: #560bad;
+  --zaffre: #3a0ca3;
+  --neon-blue: #4361ee;
+  --chefchaouen-blue: #4895ef;
+  --vivid-sky-blue: #4cc9f0;
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-[#4361ee] to-[#4895ef] text-white rounded-xl 
+           hover:from-[#3b54d4] hover:to-[#4182d5] transform hover:scale-[1.02] 
+           transition-all duration-200 font-medium shadow-lg shadow-[#4361ee]/25;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 bg-[#560bad] text-white rounded-xl 
+           hover:bg-[#4a0ca3] transform hover:scale-[1.02] 
+           transition-all duration-200 font-medium;
+  }
+
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-xl rounded-xl border border-white/20 
+           shadow-[0_8px_32px_0_rgba(74,12,163,0.3)];
+  }
+
+  .glass-input {
+    @apply w-full p-3 bg-white/5 border border-white/20 rounded-lg 
+           text-white placeholder-white/40 focus:ring-2 focus:ring-[#4361ee] 
+           focus:border-transparent;
+  }
+
+  .gradient-bg {
+    @apply bg-gradient-to-br from-[#7209b7] to-[#4cc9f0];
+  }
+}

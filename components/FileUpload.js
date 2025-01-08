@@ -265,17 +265,17 @@ export default function FileUpload({ onSuccess }) {
             <div className="flex space-x-4 mb-4">
                 <button
                     onClick={() => setShowPreviousFiles(false)}
-                    className={`px-4 py-2 rounded-md ${!showPreviousFiles 
-                        ? 'bg-[#1d2937] text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-4 py-2 rounded-lg transition-all ${!showPreviousFiles 
+                        ? 'bg-[#4361ee] text-white' 
+                        : 'bg-[#240046] text-white hover:bg-[#3c096c]'}`}
                 >
                     Upload New
                 </button>
                 <button
                     onClick={() => setShowPreviousFiles(true)}
-                    className={`px-4 py-2 rounded-md ${showPreviousFiles 
-                        ? 'bg-[#1d2937] text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-4 py-2 rounded-lg transition-all ${showPreviousFiles 
+                        ? 'bg-[#4361ee] text-white' 
+                        : 'bg-[#240046] text-white hover:bg-[#3c096c]'}`}
                 >
                     Previous Files
                 </button>
@@ -286,10 +286,10 @@ export default function FileUpload({ onSuccess }) {
                     {previousFiles.map((file) => (
                         <div
                             key={file.id}
-                            className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                            className={`p-4 rounded-lg border transition-all ${
                                 selectedFiles.includes(file.id)
-                                    ? 'border-[#1d2937] bg-[#1d2937]/5'
-                                    : 'border-gray-200 hover:border-[#1d2937]/50'
+                                    ? 'bg-[#3c096c] border-[#4cc9f0]'
+                                    : 'bg-[#240046] border-[#3c096c] hover:border-[#4cc9f0]'
                             }`}
                             onClick={() => {
                                 if (!selectedFiles.includes(file.id)) {
@@ -299,21 +299,21 @@ export default function FileUpload({ onSuccess }) {
                         >
                             <div className="flex items-center space-x-3">
                                 {file.file_type === 'pdf' ? (
-                                    <DocumentTextIcon className="h-6 w-6 text-[#1d2937]" />
+                                    <DocumentTextIcon className="h-6 w-6 text-[#4cc9f0]" />
                                 ) : (
-                                    <MusicalNoteIcon className="h-6 w-6 text-[#1d2937]" />
+                                    <MusicalNoteIcon className="h-6 w-6 text-[#4cc9f0]" />
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                    <p className="text-sm font-medium text-white truncate">
                                         {file.file_name}
                                     </p>
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-white/60">
                                         {(file.file_size / 1024).toFixed(1)} KB
                                     </p>
                                 </div>
                                 {selectedFiles.includes(file.id) && (
                                     <div className="flex-shrink-0">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#4cc9f0] text-[#240046]">
                                             Selected
                                         </span>
                                     </div>
@@ -323,47 +323,47 @@ export default function FileUpload({ onSuccess }) {
                     ))}
                 </div>
             ) : (
-                <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                <div className="flex justify-center px-6 pt-5 pb-6">
                     <div
                         {...getRootProps()}
-                        className={`p-8 border-2 border-dashed rounded-lg text-center transition-colors
-                            ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
-                            ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`p-8 rounded-lg text-center transition-all bg-[#240046] border-2 ${
+                            isDragActive ? 'border-[#4cc9f0]' : 'border-[#3c096c]'
+                        } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         <input {...getInputProps()} />
                         <div className="flex justify-center mb-4">
-                            <DocumentTextIcon className="h-12 w-12 text-gray-400" />
-                            <MusicalNoteIcon className="h-12 w-12 text-gray-400 ml-2" />
+                            <DocumentTextIcon className="h-12 w-12 text-[#4cc9f0]" />
+                            <MusicalNoteIcon className="h-12 w-12 text-[#4cc9f0] ml-2" />
                         </div>
                         {isDragActive ? (
-                            <p className="text-blue-500">Drop your files here...</p>
+                            <p className="text-[#4cc9f0] text-lg font-medium">Drop your files here...</p>
                         ) : (
                             <div>
-                                <p className="text-gray-600 mb-2">
+                                <p className="text-white text-lg mb-2">
                                     Drag and drop your files here
                                 </p>
                                 <button
                                     type="button"
                                     onClick={open}
                                     disabled={uploading}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-6 py-2 bg-[#4361ee] text-white rounded-lg hover:bg-[#3a0ca3] transition-all"
                                 >
                                     Select Files
                                 </button>
-                                <p className="text-sm text-gray-500 mt-2">
+                                <p className="text-sm text-white/60 mt-2">
                                     Supported formats: PDF, MP3, WAV, M4A
                                 </p>
                             </div>
                         )}
                         {uploadProgress > 0 && (
                             <div className="mt-4">
-                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div className="w-full bg-[#3a0ca3] rounded-full h-2">
                                     <div
-                                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                        className="bg-[#4cc9f0] h-2 rounded-full transition-all duration-300"
                                         style={{ width: `${uploadProgress}%` }}
                                     ></div>
                                 </div>
-                                <p className="text-sm text-gray-600 mt-2">
+                                <p className="text-sm text-white mt-2">
                                     {currentFile ? (
                                         `Processing: ${currentFile} (${Math.round(uploadProgress)}%)`
                                     ) : (
@@ -374,7 +374,7 @@ export default function FileUpload({ onSuccess }) {
                         )}
                         {uploading && (
                             <div className="mt-4">
-                                <p className="text-blue-500">
+                                <p className="text-[#4cc9f0]">
                                     {currentFile ? `Processing ${currentFile}...` : 'Processing files...'}
                                 </p>
                             </div>
@@ -387,13 +387,13 @@ export default function FileUpload({ onSuccess }) {
                 <div className="mt-4 space-y-2">
                     <button
                         onClick={() => setIsTestConfigModalOpen(true)}
-                        className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-6 py-2 bg-[#4361ee] text-white rounded-lg hover:bg-[#3a0ca3] transition-all"
                     >
                         Generate Test
                     </button>
                     <button
                         onClick={() => setIsFlashcardConfigModalOpen(true)}
-                        className="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-6 py-2 bg-[#560bad] text-white rounded-lg hover:bg-[#3a0ca3] transition-all"
                     >
                         Generate Flashcards
                     </button>

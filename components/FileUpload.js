@@ -49,6 +49,16 @@ export default function FileUpload({ onSuccess }) {
     }
 
     const handleStoredFileSelect = async (file) => {
+        // If already selected, deselect
+        if (selectedFiles.includes(file.id)) {
+            setSelectedFiles(prev => prev.filter(id => id !== file.id));
+            setProcessedFiles(prev => prev.filter(f => f.id !== file.id));
+            return;
+        }
+
+        // Immediately update UI for selection
+        setSelectedFiles(prev => [...prev, file.id]);
+        
         try {
             setLoadingStoredFile(true);
             setError(null);
@@ -70,6 +80,8 @@ export default function FileUpload({ onSuccess }) {
 
             if (!response.ok) {
                 const errorData = await response.json();
+                // Remove selection if file content couldn't be fetched
+                setSelectedFiles(prev => prev.filter(id => id !== file.id));
                 throw new Error(errorData.error || 'Failed to fetch file content');
             }
 
@@ -80,9 +92,6 @@ export default function FileUpload({ onSuccess }) {
                 ...data.file,
                 isStored: true
             }]);
-
-            // Add to selected files
-            setSelectedFiles(prev => [...prev, file.id]);
 
         } catch (error) {
             console.error('Error fetching stored file:', error);
@@ -292,8 +301,8 @@ export default function FileUpload({ onSuccess }) {
                                     : 'bg-[#240046] border-[#3c096c] hover:border-[#4cc9f0]'
                             }`}
                             onClick={() => {
-                                if (!selectedFiles.includes(file.id)) {
-                                    handleStoredFileSelect(file)
+                                if (!loadingStoredFile) {
+                                    handleStoredFileSelect(file);
                                 }
                             }}
                         >

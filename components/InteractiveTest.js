@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../utils/supabase';
 import { StarIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
@@ -8,9 +8,11 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
     const [submitted, setSubmitted] = useState(false);
     const [score, setScore] = useState(null);
     const [bestScore, setBestScore] = useState(null);
+    const [isNewHighScore, setIsNewHighScore] = useState(false);
     const [attemptHistory, setAttemptHistory] = useState([]);
     const [starredQuestions, setStarredQuestions] = useState({});
     const [displayQuestions, setDisplayQuestions] = useState([]);
+    const scoreRef = useRef(null);
 
     useEffect(() => {
         fetchTestHistory();
@@ -28,6 +30,12 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
             }
         }
     }, [test.questions, starredQuestions, starredOnly]);
+
+    useEffect(() => {
+        if (submitted && scoreRef.current) {
+            scoreRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [submitted]);
 
     const fetchTestHistory = async () => {
         try {
@@ -139,8 +147,10 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
     const handleSubmit = async () => {
         const finalScore = calculateScore();
+        const isNewBest = finalScore > (bestScore || 0);
         setScore(finalScore);
         setSubmitted(true);
+        setIsNewHighScore(isNewBest);
 
         try {
             // Save the attempt in test_attempts table
@@ -160,7 +170,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                 .from('tests')
                 .update({ 
                     last_score: finalScore,
-                    best_score: bestScore === null ? finalScore : Math.max(finalScore, bestScore)
+                    best_score: isNewBest ? finalScore : bestScore
                 })
                 .eq('id', test.id);
 
@@ -171,7 +181,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
             // Notify parent component of test completion without closing
             if (onTestComplete) {
-                onTestComplete(test.id, finalScore, false); // Added false parameter to prevent auto-closing
+                onTestComplete(test.id, finalScore, false);
             }
         } catch (error) {
             console.error('Error saving test score:', error);
@@ -208,25 +218,99 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                     </div>
 
                     {submitted ? (
-                        <div className="p-8 text-center">
-                            <div className="mb-8">
-                                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#1d2937]/20 backdrop-blur-xl mb-4">
-                                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                        <div className="p-6 space-y-6">
+                            {/* Score Summary Section */}
+                            <div ref={scoreRef} className="bg-white/10 backdrop-blur-xl rounded-xl p-6 border border-white/20">
+                                <div className="text-center mb-6">
+                                    {isNewHighScore && (
+                                        <div className="animate-bounce mb-4">
+                                            <div className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-yellow-500/20 text-yellow-400 text-sm font-medium">
+                                                🏆 New High Score!
+                                            </div>
+                                        </div>
+                                    )}
+                                    <h2 className="text-3xl font-bold text-white mb-2">Test Complete!</h2>
+                                    <p className="text-gray-300 text-lg mb-2">
+                                        Your Score: {score}%
+                                    </p>
+                                    <p className="text-gray-400 text-sm">
+                                        {isNewHighScore ? (
+                                            <span className="text-yellow-400">Previous Best: {bestScore || 0}%</span>
+                                        ) : (
+                                            bestScore && `Personal Best: ${bestScore}%`
+                                        )}
+                                    </p>
                                 </div>
-                                <h2 className="text-3xl font-bold text-white mb-2">Test Complete!</h2>
-                                <p className="text-gray-300 text-lg">
-                                    Your Score: {score}%
-                                </p>
+                                <div className="flex space-x-3">
+                                    <button
+                                        onClick={handleReset}
+                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                                    >
+                                        Retake Test
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        className="flex-1 px-6 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                                    >
+                                        Close Test
+                                    </button>
+                                </div>
                             </div>
-                            <div className="space-y-3">
-                                <button
-                                    onClick={onClose}
-                                    className="w-full px-6 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium"
-                                >
-                                    Close Test
-                                </button>
+
+                            {/* Questions Review Section */}
+                            <div className="space-y-6">
+                                {test.questions.map((question, index) => (
+                                    <div key={index} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <p className="text-lg font-medium text-white flex items-start flex-1">
+                                                <span className="mr-3 text-gray-400">{index + 1}.</span>
+                                                <span>{question.question}</span>
+                                            </p>
+                                            <button
+                                                onClick={() => handleStarQuestion(index)}
+                                                className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
+                                            >
+                                                {starredQuestions[index] ? (
+                                                    <StarIconSolid className="h-5 w-5 text-yellow-400" />
+                                                ) : (
+                                                    <StarIcon className="h-5 w-5" />
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        <div className={`p-4 rounded-lg ${
+                                            answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                ? 'bg-green-500/10 border border-green-500/20'
+                                                : 'bg-red-500/10 border border-red-500/20'
+                                        }`}>
+                                            <div className="flex items-center mb-2">
+                                                <span className={`text-sm font-medium ${
+                                                    answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                        ? 'text-green-400'
+                                                        : 'text-red-400'
+                                                }`}>
+                                                    {answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                        ? '✓ Correct'
+                                                        : '✗ Incorrect'}
+                                                </span>
+                                            </div>
+                                            <p className="text-base text-gray-300">
+                                                <span className="text-gray-400">Your answer: </span>
+                                                {answers[index] ? (
+                                                    question.type === 'multiple_choice'
+                                                        ? `${String.fromCharCode(65 + question.options.indexOf(answers[index]))}. ${answers[index]}`
+                                                        : answers[index]
+                                                ) : 'Not answered'}
+                                            </p>
+                                            <p className="text-base text-gray-300 mt-1">
+                                                <span className="text-gray-400">Correct answer: </span>
+                                                {question.type === 'multiple_choice'
+                                                    ? `${String.fromCharCode(65 + question.options.indexOf(question.correctAnswer))}. ${question.correctAnswer}`
+                                                    : question.correctAnswer}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     ) : (
@@ -282,18 +366,38 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                     )}
 
                                     {submitted && (
-                                        <div className="mt-4 p-4 rounded-lg bg-white/5 border border-white/10">
-                                            <p className={`text-base ${
+                                        <div className="mt-4 space-y-3">
+                                            <div className={`p-4 rounded-lg ${
                                                 answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
-                                                    ? 'text-green-400'
-                                                    : 'text-red-400'
+                                                    ? 'bg-green-500/10 border border-green-500/20'
+                                                    : 'bg-red-500/10 border border-red-500/20'
                                             }`}>
-                                                Correct Answer: {
-                                                    question.type === 'multiple_choice' 
+                                                <div className="flex items-center mb-2">
+                                                    <span className={`text-sm font-medium ${
+                                                        answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                            ? 'text-green-400'
+                                                            : 'text-red-400'
+                                                    }`}>
+                                                        {answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                            ? '✓ Correct'
+                                                            : '✗ Incorrect'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-base text-gray-300">
+                                                    <span className="text-gray-400">Your answer: </span>
+                                                    {answers[index] ? (
+                                                        question.type === 'multiple_choice'
+                                                            ? `${String.fromCharCode(65 + question.options.indexOf(answers[index]))}. ${answers[index]}`
+                                                            : answers[index]
+                                                    ) : 'Not answered'}
+                                                </p>
+                                                <p className="text-base text-gray-300 mt-1">
+                                                    <span className="text-gray-400">Correct answer: </span>
+                                                    {question.type === 'multiple_choice'
                                                         ? `${String.fromCharCode(65 + question.options.indexOf(question.correctAnswer))}. ${question.correctAnswer}`
-                                                        : question.correctAnswer
-                                                }
-                                            </p>
+                                                        : question.correctAnswer}
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

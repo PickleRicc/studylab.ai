@@ -12,6 +12,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
     const [attemptHistory, setAttemptHistory] = useState([]);
     const [starredQuestions, setStarredQuestions] = useState({});
     const [displayQuestions, setDisplayQuestions] = useState([]);
+    const [mode, setMode] = useState('all');
     const scoreRef = useRef(null);
 
     useEffect(() => {
@@ -21,15 +22,14 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
     useEffect(() => {
         if (test?.questions) {
-            if (starredOnly) {
-                // Filter questions to only show starred ones
+            if (mode === 'starred') {
                 const filteredQuestions = test.questions.filter((_, index) => starredQuestions[index]);
                 setDisplayQuestions(filteredQuestions);
             } else {
                 setDisplayQuestions(test.questions);
             }
         }
-    }, [test.questions, starredQuestions, starredOnly]);
+    }, [test.questions, starredQuestions, mode]);
 
     useEffect(() => {
         if (submitted && scoreRef.current) {
@@ -90,33 +90,48 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
                 if (error) throw error;
 
+                // Only update state if database operation was successful
                 setStarredQuestions(prev => {
                     const updated = { ...prev };
                     delete updated[questionIndex];
                     return updated;
                 });
             } else {
-                // Add star
-                const { error } = await supabase
+                // Check if the question is already starred in the database
+                const { data: existingStars, error: checkError } = await supabase
                     .from('starred_questions')
-                    .insert({
-                        test_id: test.id,
-                        question_index: questionIndex,
-                        question_text: question.question,
-                        correct_answer: question.correctAnswer,
-                        question_type: question.type,
-                        options: question.options
-                    });
+                    .select('*')
+                    .eq('test_id', test.id)
+                    .eq('question_index', questionIndex);
 
-                if (error) throw error;
+                if (checkError) throw checkError;
 
-                setStarredQuestions(prev => ({
-                    ...prev,
-                    [questionIndex]: true
-                }));
+                // Only insert if not already starred
+                if (!existingStars || existingStars.length === 0) {
+                    const { error } = await supabase
+                        .from('starred_questions')
+                        .insert({
+                            test_id: test.id,
+                            question_index: questionIndex,
+                            question_text: question.question,
+                            correct_answer: question.correctAnswer,
+                            question_type: question.type,
+                            options: question.options
+                        });
+
+                    if (error) throw error;
+
+                    // Only update state if database operation was successful
+                    setStarredQuestions(prev => ({
+                        ...prev,
+                        [questionIndex]: true
+                    }));
+                }
             }
         } catch (error) {
             console.error('Error updating starred question:', error);
+            // Refresh starred questions from database on error to ensure consistency
+            fetchStarredQuestions();
         }
     };
 
@@ -179,12 +194,12 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
             // Refresh test history
             await fetchTestHistory();
 
-            // Notify parent component of test completion without closing
+            // Call onTestComplete with the updated score
             if (onTestComplete) {
-                onTestComplete(test.id, finalScore, false);
+                onTestComplete(test.id, finalScore);
             }
         } catch (error) {
-            console.error('Error saving test score:', error);
+            console.error('Error saving test attempt:', error);
         }
     };
 
@@ -192,6 +207,13 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
         setAnswers({});
         setSubmitted(false);
         setScore(null);
+    };
+
+    const handleModeChange = (newMode) => {
+        if (!submitted) {
+            setMode(newMode);
+            setAnswers({});
+        }
     };
 
     return (
@@ -204,17 +226,43 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                 {test.title || `Test #${test.id}`}
                             </h2>
                             <p className="text-gray-300 mt-1">
-                                {test.questions.length} questions
+                                {mode === 'starred' ? `${displayQuestions.length} starred questions` : `${test.questions.length} questions`}
                             </p>
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-all"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div className="flex items-center space-x-4">
+                            {!submitted && (
+                                <div className="flex rounded-lg overflow-hidden border border-white/20">
+                                    <button
+                                        onClick={() => handleModeChange('all')}
+                                        className={`px-4 py-2 text-sm transition-all ${
+                                            mode === 'all'
+                                                ? 'bg-white/20 text-white'
+                                                : 'text-gray-300 hover:bg-white/10'
+                                        }`}
+                                    >
+                                        All Questions
+                                    </button>
+                                    <button
+                                        onClick={() => handleModeChange('starred')}
+                                        className={`px-4 py-2 text-sm transition-all ${
+                                            mode === 'starred'
+                                                ? 'bg-white/20 text-white'
+                                                : 'text-gray-300 hover:bg-white/10'
+                                        }`}
+                                    >
+                                        Starred Only
+                                    </button>
+                                </div>
+                            )}
+                            <button
+                                onClick={onClose}
+                                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-all"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {submitted ? (
@@ -232,6 +280,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                     <h2 className="text-3xl font-bold text-white mb-2">Test Complete!</h2>
                                     <p className="text-gray-300 text-lg mb-2">
                                         Your Score: {score}%
+                                        {mode === 'starred' && <span className="text-sm ml-2">(Starred Questions Only)</span>}
                                     </p>
                                     <p className="text-gray-400 text-sm">
                                         {isNewHighScore ? (
@@ -259,18 +308,20 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
 
                             {/* Questions Review Section */}
                             <div className="space-y-6">
-                                {test.questions.map((question, index) => (
-                                    <div key={index} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
+                                {displayQuestions.map((question, index) => {
+                                    const originalIndex = test.questions.findIndex(q => q.question === question.question);
+                                    return (
+                                    <div key={originalIndex} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
                                         <div className="flex justify-between items-start mb-4">
                                             <p className="text-lg font-medium text-white flex items-start flex-1">
                                                 <span className="mr-3 text-gray-400">{index + 1}.</span>
                                                 <span>{question.question}</span>
                                             </p>
                                             <button
-                                                onClick={() => handleStarQuestion(index)}
+                                                onClick={() => handleStarQuestion(originalIndex)}
                                                 className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
                                             >
-                                                {starredQuestions[index] ? (
+                                                {starredQuestions[originalIndex] ? (
                                                     <StarIconSolid className="h-5 w-5 text-yellow-400" />
                                                 ) : (
                                                     <StarIcon className="h-5 w-5" />
@@ -279,27 +330,27 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                         </div>
 
                                         <div className={`p-4 rounded-lg ${
-                                            answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                            answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                 ? 'bg-green-500/10 border border-green-500/20'
                                                 : 'bg-red-500/10 border border-red-500/20'
                                         }`}>
                                             <div className="flex items-center mb-2">
                                                 <span className={`text-sm font-medium ${
-                                                    answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                    answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                         ? 'text-green-400'
                                                         : 'text-red-400'
                                                 }`}>
-                                                    {answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                    {answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                         ? '✓ Correct'
                                                         : '✗ Incorrect'}
                                                 </span>
                                             </div>
                                             <p className="text-base text-gray-300">
                                                 <span className="text-gray-400">Your answer: </span>
-                                                {answers[index] ? (
+                                                {answers[originalIndex] ? (
                                                     question.type === 'multiple_choice'
-                                                        ? `${String.fromCharCode(65 + question.options.indexOf(answers[index]))}. ${answers[index]}`
-                                                        : answers[index]
+                                                        ? `${String.fromCharCode(65 + question.options.indexOf(answers[originalIndex]))}. ${answers[originalIndex]}`
+                                                        : answers[originalIndex]
                                                 ) : 'Not answered'}
                                             </p>
                                             <p className="text-base text-gray-300 mt-1">
@@ -310,23 +361,25 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                             </p>
                                         </div>
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </div>
                     ) : (
                         <div className="p-6 space-y-6">
-                            {test.questions.map((question, index) => (
-                                <div key={index} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
+                            {displayQuestions.map((question, index) => {
+                                const originalIndex = test.questions.findIndex(q => q.question === question.question);
+                                return (
+                                <div key={originalIndex} className="bg-white/5 backdrop-blur-xl rounded-xl p-6 border border-white/10">
                                     <div className="flex justify-between items-start mb-4">
                                         <p className="text-lg font-medium text-white flex items-start flex-1">
                                             <span className="mr-3 text-gray-400">{index + 1}.</span>
                                             <span>{question.question}</span>
                                         </p>
                                         <button
-                                            onClick={() => handleStarQuestion(index)}
+                                            onClick={() => handleStarQuestion(originalIndex)}
                                             className="ml-4 text-gray-300 hover:text-yellow-400 transition-colors"
                                         >
-                                            {starredQuestions[index] ? (
+                                            {starredQuestions[originalIndex] ? (
                                                 <StarIconSolid className="h-5 w-5 text-yellow-400" />
                                             ) : (
                                                 <StarIcon className="h-5 w-5" />
@@ -343,9 +396,9 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                                 >
                                                     <input
                                                         type="radio"
-                                                        name={`question-${index}`}
+                                                        name={`question-${originalIndex}`}
                                                         value={choice}
-                                                        onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                                        onChange={(e) => handleAnswerChange(originalIndex, e.target.value)}
                                                         disabled={submitted}
                                                         className="form-radio text-blue-500 border-white/30 focus:ring-blue-500 focus:ring-offset-0 bg-transparent"
                                                     />
@@ -359,7 +412,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                         <input
                                             type="text"
                                             placeholder="Type your answer..."
-                                            onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                            onChange={(e) => handleAnswerChange(originalIndex, e.target.value)}
                                             disabled={submitted}
                                             className="w-full p-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         />
@@ -368,27 +421,27 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                     {submitted && (
                                         <div className="mt-4 space-y-3">
                                             <div className={`p-4 rounded-lg ${
-                                                answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                     ? 'bg-green-500/10 border border-green-500/20'
                                                     : 'bg-red-500/10 border border-red-500/20'
                                             }`}>
                                                 <div className="flex items-center mb-2">
                                                     <span className={`text-sm font-medium ${
-                                                        answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                        answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                             ? 'text-green-400'
                                                             : 'text-red-400'
                                                     }`}>
-                                                        {answers[index]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
+                                                        {answers[originalIndex]?.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()
                                                             ? '✓ Correct'
                                                             : '✗ Incorrect'}
                                                     </span>
                                                 </div>
                                                 <p className="text-base text-gray-300">
                                                     <span className="text-gray-400">Your answer: </span>
-                                                    {answers[index] ? (
+                                                    {answers[originalIndex] ? (
                                                         question.type === 'multiple_choice'
-                                                            ? `${String.fromCharCode(65 + question.options.indexOf(answers[index]))}. ${answers[index]}`
-                                                            : answers[index]
+                                                            ? `${String.fromCharCode(65 + question.options.indexOf(answers[originalIndex]))}. ${answers[originalIndex]}`
+                                                            : answers[originalIndex]
                                                     ) : 'Not answered'}
                                                 </p>
                                                 <p className="text-base text-gray-300 mt-1">
@@ -401,7 +454,7 @@ export default function InteractiveTest({ test, onClose, onTestComplete, starred
                                         </div>
                                     )}
                                 </div>
-                            ))}
+                            )})}
 
                             <button
                                 onClick={handleSubmit}

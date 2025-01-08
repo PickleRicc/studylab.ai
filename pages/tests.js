@@ -4,14 +4,12 @@ import { supabase } from '../utils/supabase';
 import TestCard from '../components/TestCard';
 import InteractiveTest from '../components/InteractiveTest';
 import DashboardNav from '../components/DashboardNav';
-import StarredQuestionsReview from '../components/StarredQuestionsReview';
 
 export default function Tests() {
   const router = useRouter();
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTest, setSelectedTest] = useState(null);
-  const [reviewingStarred, setReviewingStarred] = useState(false);
   const [activeTab, setActiveTab] = useState('recent');
   const [currentPage, setCurrentPage] = useState(1);
   const testsPerPage = 6;
@@ -123,6 +121,20 @@ export default function Tests() {
     }
   };
 
+  const handleTestComplete = async (testId, score) => {
+    // Update the tests state immediately with the new score
+    setTests(prevTests => prevTests.map(test => {
+      if (test.id === testId) {
+        return {
+          ...test,
+          last_score: score,
+          best_score: score > (test.best_score || 0) ? score : test.best_score
+        };
+      }
+      return test;
+    }));
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -215,21 +227,15 @@ export default function Tests() {
         </div>
         {selectedTest && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {reviewingStarred ? (
-              <StarredQuestionsReview
-                test={selectedTest}
-                onClose={() => {
-                  setSelectedTest(null);
-                  setReviewingStarred(false);
-                }}
-              />
-            ) : (
-              <InteractiveTest
-                test={selectedTest}
-                onClose={() => setSelectedTest(null)}
-                onUpdate={handleTestUpdate}
-              />
-            )}
+            <InteractiveTest
+              test={selectedTest}
+              onClose={() => {
+                setSelectedTest(null);
+                router.push('/tests', undefined, { shallow: true });
+              }}
+              onUpdate={handleTestUpdate}
+              onTestComplete={handleTestComplete}
+            />
           </div>
         )}
         {!selectedTest && renderContent()}

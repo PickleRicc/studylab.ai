@@ -84,7 +84,7 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
         <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -98,11 +98,11 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-[#240046] border border-[#4cc9f0] px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
                 <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
                   <button
                     type="button"
-                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    className="rounded-md bg-[#240046] text-[#4cc9f0] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#4cc9f0] focus:ring-offset-2 transition-colors"
                     onClick={onClose}
                   >
                     <span className="sr-only">Close</span>
@@ -111,13 +111,13 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                 </div>
                 <div className="sm:flex sm:items-start">
                   <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                    <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                    <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-white">
                       Configure Test
                     </Dialog.Title>
                     <form onSubmit={handleSubmit} className="mt-4 space-y-6">
                       {/* Test Name */}
                       <div className="space-y-1">
-                        <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="title" className="block text-sm font-medium text-white">
                           Test Name <span className="text-red-500">*</span>
                         </label>
                         <div className="relative">
@@ -128,7 +128,7 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                             value={testName}
                             onChange={handleTestNameChange}
                             placeholder="Enter a descriptive name for your test"
-                            className={`mt-1 block w-full rounded-md shadow-sm text-base py-2.5 px-4
+                            className={`mt-1 block w-full rounded-md shadow-sm text-base py-2.5 px-4 bg-[#3c096c] text-white
                               ${nameError 
                                 ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
                                 : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
@@ -151,20 +151,20 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                             {nameError}
                           </p>
                         )}
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-[#4cc9f0]">
                           Choose a clear, descriptive name to help you identify this test later
                         </p>
                       </div>
                       {/* Number of Questions */}
                       <div>
-                        <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="numQuestions" className="block text-sm font-medium text-white">
                           Number of Questions
                         </label>
                         <select
                           id="numQuestions"
                           name="numQuestions"
                           defaultValue={numQuestions}
-                          className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm bg-[#3c096c] text-white"
                         >
                           {[5, 10, 15, 20, 50, 70].map(num => (
                             <option key={num} value={num}>{num}</option>
@@ -174,7 +174,7 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
 
                       {/* Question Types */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-white">
                           Question Types
                         </label>
                         <div className="mt-2 space-y-2">
@@ -185,9 +185,9 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                               type="checkbox"
                               defaultChecked={questionTypes.includes('multiple_choice')}
                               value="multiple_choice"
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="h-4 w-4 rounded border-[#4cc9f0] text-[#4361ee] focus:ring-[#4cc9f0] bg-[#3c096c]"
                             />
-                            <label htmlFor="multiple_choice" className="ml-2 text-sm text-gray-700">
+                            <label htmlFor="multiple_choice" className="ml-2 text-sm text-white">
                               Multiple Choice
                             </label>
                           </div>
@@ -198,9 +198,9 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                               type="checkbox"
                               defaultChecked={questionTypes.includes('short_answer')}
                               value="short_answer"
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="h-4 w-4 rounded border-[#4cc9f0] text-[#4361ee] focus:ring-[#4cc9f0] bg-[#3c096c]"
                             />
-                            <label htmlFor="short_answer" className="ml-2 text-sm text-gray-700">
+                            <label htmlFor="short_answer" className="ml-2 text-sm text-white">
                               Short Answer
                             </label>
                           </div>
@@ -209,14 +209,14 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
 
                       {/* Difficulty */}
                       <div>
-                        <label htmlFor="difficulty" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="difficulty" className="block text-sm font-medium text-white">
                           Difficulty
                         </label>
                         <select
                           id="difficulty"
                           name="difficulty"
                           defaultValue={difficulty}
-                          className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm bg-[#3c096c] text-white"
                         >
                           {['easy', 'medium', 'hard'].map(level => (
                             <option key={level} value={level}>
@@ -232,10 +232,10 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                           disabled={isGenerating}
                           className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm 
                             ${isSuccess 
-                              ? 'bg-green-600'
+                              ? 'bg-[#4cc9f0]'
                               : isGenerating 
-                                ? 'bg-blue-400 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-500'
+                                ? 'bg-[#3c096c] cursor-not-allowed'
+                                : 'bg-[#4361ee] hover:bg-[#3a0ca3]'
                             } sm:col-start-2`}
                         >
                           {isSuccess ? (
@@ -255,7 +255,7 @@ export default function TestConfigModal({ isOpen, onClose, onGenerate, defaultCo
                         </button>
                         <button
                           type="button"
-                          className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                          className="mt-3 inline-flex w-full justify-center rounded-md bg-[#3c096c] px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#240046] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4cc9f0] sm:mt-0 sm:w-auto transition-colors"
                           onClick={onClose}
                         >
                           Cancel

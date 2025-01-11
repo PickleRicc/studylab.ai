@@ -8,9 +8,14 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
     const [isFlipped, setIsFlipped] = useState(false);
     const [loading, setLoading] = useState(true);
     const [showAnswerButtons, setShowAnswerButtons] = useState(false);
+    const [isComplete, setIsComplete] = useState(false);
+    const [knownCards, setKnownCards] = useState(0);
+    const [learningCards, setLearningCards] = useState(0);
 
     useEffect(() => {
-        loadReviewCards();
+        if (setId) {
+            loadReviewCards();
+        }
     }, [setId]);
 
     const loadReviewCards = async () => {
@@ -27,6 +32,7 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
             if (!data || data.length === 0) {
                 setFlashcards([]);
                 setLoading(false);
+                setIsComplete(true);
                 return;
             }
 
@@ -36,6 +42,7 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
             setCurrentIndex(0);
             setIsFlipped(false);
             setShowAnswerButtons(false);
+            setIsComplete(false);
         } catch (err) {
             console.error('Error loading review cards:', err);
             setFlashcards([]);
@@ -49,6 +56,8 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
             setCurrentIndex(prev => prev + 1);
             setIsFlipped(false);
             setShowAnswerButtons(false);
+        } else {
+            setIsComplete(true);
         }
     };
 
@@ -80,11 +89,19 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
                 })
                 .eq('id', currentCard.id);
 
+            if (isCorrect) {
+                setKnownCards(prev => prev + 1);
+            } else {
+                setLearningCards(prev => prev + 1);
+            }
+
             // If correct, remove from current review session
             if (isCorrect) {
                 const updatedCards = flashcards.filter((_, index) => index !== currentIndex);
                 setFlashcards(updatedCards);
-                if (currentIndex >= updatedCards.length) {
+                if (updatedCards.length === 0) {
+                    setIsComplete(true);
+                } else if (currentIndex >= updatedCards.length) {
                     setCurrentIndex(Math.max(0, updatedCards.length - 1));
                 }
                 setIsFlipped(false);
@@ -97,47 +114,64 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
         }
     };
 
-    if (loading) return <div className="text-center p-4">Loading review cards...</div>;
-    if (!flashcards.length) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
-                    <h2 className="text-xl font-semibold mb-4">Nothing to Review</h2>
-                    <p className="text-gray-600 mb-6">
-                        Study the original set first and mark cards you need to review.
-                    </p>
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                        Close
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    if (loading) return (
+        <div className="fixed inset-0 bg-gradient-to-br from-[#10002b] to-[#240046] flex items-center justify-center">
+            <div className="text-white text-lg">Loading review cards...</div>
+        </div>
+    );
 
-    const currentCard = flashcards[currentIndex];
-    const progress = ((currentIndex + 1) / flashcards.length) * 100;
+    if (isComplete || !flashcards.length) return (
+        <div className="fixed inset-0 bg-gradient-to-br from-[#10002b] to-[#240046] flex items-center justify-center p-4">
+            <div className="bg-[#240046]/80 backdrop-blur-xl rounded-2xl p-8 max-w-md w-full border border-[#3c096c] text-center">
+                <div className="mb-6">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#3c096c]/20 backdrop-blur-xl mb-4">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">All Caught Up!</h2>
+                    <p className="text-white/60">
+                        No cards need review at the moment. Keep up the good work!
+                    </p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="w-full px-6 py-3 bg-[#4361ee] text-white rounded-xl hover:bg-[#4cc9f0] transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                >
+                    Return to Sets
+                </button>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="fixed inset-0 bg-gradient-to-br from-[#1d2937] to-gray-900 flex items-center justify-center p-4">
-            <div className="relative bg-white/10 backdrop-blur-xl rounded-2xl w-full max-w-4xl overflow-hidden border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.3)]">
-                <div className="flex justify-between items-center p-6 border-b border-white/10">
+        <div className="fixed inset-0 bg-gradient-to-br from-[#10002b] to-[#240046] flex items-center justify-center p-4">
+            <div className="relative bg-[#240046]/80 backdrop-blur-xl rounded-2xl w-full max-w-4xl overflow-hidden border border-[#3c096c] shadow-[0_8px_32px_0_rgba(31,38,135,0.3)]">
+                <div className="flex justify-between items-center p-6 border-b border-[#3c096c]">
                     <div className="flex items-center space-x-4">
                         <div className="text-xl font-semibold text-white">
                             {currentIndex + 1}/{flashcards.length}
                         </div>
-                        <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div className="w-48 h-2 bg-[#3c096c]/20 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-gradient-to-r from-[#1d2937] to-blue-500 transition-all duration-300"
-                                style={{ width: `${progress}%` }}
+                                className="h-full bg-gradient-to-r from-[#4361ee] to-[#4cc9f0] transition-all duration-300"
+                                style={{ width: `${(currentIndex + 1) / flashcards.length * 100}%` }}
                             ></div>
+                        </div>
+                        <div className="flex items-center space-x-3 text-sm">
+                            <div className="flex items-center text-[#4cc9f0]">
+                                <span className="mr-1">✓</span>
+                                <span>{knownCards}</span>
+                            </div>
+                            <div className="flex items-center text-[#ff758f]">
+                                <span className="mr-1">✕</span>
+                                <span>{learningCards}</span>
+                            </div>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-white transition-colors"
+                        className="text-white/60 hover:text-[#4cc9f0] transition-colors"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -157,25 +191,25 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
                         >
                             {/* Front of card */}
                             <div className="absolute inset-0 backface-hidden">
-                                <div className="h-full bg-white/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-white/30">
-                                    <div className="text-sm text-gray-300 mb-4">Question</div>
+                                <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c]">
+                                    <div className="text-sm text-white/60 mb-4">Question</div>
                                     <div className="text-2xl text-white text-center font-medium">
-                                        {currentCard?.front_content}
+                                        {flashcards[currentIndex]?.front_content}
                                     </div>
-                                    <div className="absolute bottom-4 text-gray-400">
+                                    <div className="absolute bottom-4 text-white/60">
                                         Click to flip
                                     </div>
                                 </div>
                             </div>
                             {/* Back of card */}
                             <div className="absolute inset-0 backface-hidden rotate-y-180">
-                                <div className="h-full bg-white/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-white/30">
-                                    <div className="text-sm text-gray-300 mb-4">Answer</div>
+                                <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c]">
+                                    <div className="text-sm text-white/60 mb-4">Answer</div>
                                     <div className="text-2xl text-white text-center font-medium">
-                                        {currentCard?.back_content}
+                                        {flashcards[currentIndex]?.back_content}
                                     </div>
                                     {!showAnswerButtons && (
-                                        <div className="absolute bottom-4 text-gray-400">
+                                        <div className="absolute bottom-4 text-white/60">
                                             Click to flip back
                                         </div>
                                     )}
@@ -188,41 +222,18 @@ export default function FlashcardStudyReviewView({ setId, onClose }) {
                         <div className="flex justify-center gap-4 mt-8">
                             <button
                                 onClick={() => handleAnswer(false)}
-                                className="px-8 py-3 bg-white/10 backdrop-blur-xl text-white rounded-xl hover:bg-white/20 transform hover:scale-[1.02] transition-all duration-200 font-medium flex items-center"
+                                className="px-8 py-3 bg-[#3c096c]/20 backdrop-blur-xl text-white rounded-xl hover:bg-[#3c096c]/40 transform hover:scale-[1.02] transition-all duration-200 font-medium flex items-center"
                             >
                                 <span className="text-xl mr-2">✕</span> Still Learning
                             </button>
                             <button
                                 onClick={() => handleAnswer(true)}
-                                className="px-8 py-3 bg-[#1d2937] text-white rounded-xl hover:bg-[#2d3947] transform hover:scale-[1.02] transition-all duration-200 font-medium flex items-center"
+                                className="px-8 py-3 bg-[#4361ee] text-white rounded-xl hover:bg-[#4cc9f0] transform hover:scale-[1.02] transition-all duration-200 font-medium flex items-center"
                             >
                                 <span className="text-xl mr-2">✓</span> Got It
                             </button>
                         </div>
                     )}
-
-                    <div className="flex justify-between mt-6">
-                        <button
-                            onClick={handlePrevious}
-                            disabled={currentIndex === 0}
-                            className="px-6 py-2 bg-white/10 backdrop-blur-xl text-white rounded-xl hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center"
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-                            </svg>
-                            Previous
-                        </button>
-                        <button
-                            onClick={handleNext}
-                            disabled={currentIndex === flashcards.length - 1}
-                            className="px-6 py-2 bg-white/10 backdrop-blur-xl text-white rounded-xl hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center"
-                        >
-                            Next
-                            <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </button>
-                    </div>
                 </div>
             </div>
             <style jsx global>{`

@@ -4,6 +4,7 @@ import DashboardNav from '../components/DashboardNav';
 import FlashcardSetCard from '../components/FlashcardSetCard';
 import FlashcardStudyView from '../components/FlashcardStudyView';
 import FlashcardStudyReviewView from '../components/FlashcardStudyReviewView';
+import CreateFlashcardModal from '../components/CreateFlashcardModal';
 import { useRouter } from 'next/router';
 
 export default function Flashcards() {
@@ -14,8 +15,9 @@ export default function Flashcards() {
   const [selectedSet, setSelectedSet] = useState(null);
   const [studyMode, setStudyMode] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newSetTitle, setNewSetTitle] = useState('');
+  const [showCustomFlashcardModal, setShowCustomFlashcardModal] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [displayCount, setDisplayCount] = useState(6);
 
   useEffect(() => {
     loadFlashcardSets();
@@ -43,13 +45,19 @@ export default function Flashcards() {
 
       const { data: sets, error: setsError } = await supabase
         .from('flashcard_sets')
-        .select('*, flashcards(*)')
+        .select('*, flashcards!inner(*)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (setsError) throw setsError;
 
-      setFlashcardSets(sets || []);
+      // Sort flashcards by position within each set
+      const sortedSets = sets?.map(set => ({
+        ...set,
+        flashcards: [...set.flashcards].sort((a, b) => a.position - b.position)
+      })) || [];
+
+      setFlashcardSets(sortedSets);
     } catch (err) {
       console.error('Error loading flashcard sets:', err);
       setError('Failed to load flashcard sets');
@@ -79,14 +87,14 @@ export default function Flashcards() {
     }
   };
 
-  const handleStudyClick = (setId) => {
-    setSelectedSet(setId);
+  const handleStudyClick = (set) => {
+    setSelectedSet(set);
     setStudyMode(true);
     setReviewMode(false);
   };
 
-  const handleReviewClick = (setId) => {
-    setSelectedSet(setId);
+  const handleReviewClick = (set) => {
+    setSelectedSet(set);
     setReviewMode(true);
     setStudyMode(false);
   };
@@ -109,11 +117,16 @@ export default function Flashcards() {
     try {
       const { data, error } = await supabase
         .from('flashcard_sets')
-        .insert([{ title: newSetTitle, user_id: supabase.auth.user().id }]);
+        .insert([{ 
+          title: newSetTitle, 
+          user_id: supabase.auth.user().id,
+          created_at: new Date().toISOString()
+        }])
+        .select();
 
       if (error) throw error;
 
-      setFlashcardSets(prevSets => [...prevSets, data[0]]);
+      setFlashcardSets(prevSets => [data[0], ...prevSets]);
       setShowCreateModal(false);
       setNewSetTitle('');
     } catch (err) {
@@ -121,113 +134,205 @@ export default function Flashcards() {
     }
   };
 
+  const handleImageUpload = async (file, side) => {
+    const formData = new FormData();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    formData.append('file', file);
+    formData.append('userId', user.id);
+    formData.append('side', side);
+    
+    try {
+      const response = await fetch('/api/upload-flashcard-image', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload image');
+      }
+      
+      const data = await response.json();
+      return data.url;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw error;
+    }
+  };
+
+  const handleCustomFlashcardSave = async (cardData) => {
+    try {
+      setIsUploading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Create new flashcard set
+      const { data: newSet, error: setError } = await supabase
+        .from('flashcard_sets')
+        .insert([{
+          title: cardData.title,
+          user_id: user.id,
+          type: 'custom',
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (setError) throw setError;
+
+      // Process each card
+      const processedCards = await Promise.all(cardData.cards.map(async (card, index) => {
+        let frontImageUrl = null;
+        let backImageUrl = null;
+
+        if (card.frontImageFile) {
+          frontImageUrl = await handleImageUpload(card.frontImageFile, 'front');
+        }
+        if (card.backImageFile) {
+          backImageUrl = await handleImageUpload(card.backImageFile, 'back');
+        }
+
+        return {
+          set_id: newSet.id,
+          front_content: card.front,
+          back_content: card.back,
+          front_type: card.frontImageFile ? 'image' : 'text',
+          back_type: card.backImageFile ? 'image' : 'text',
+          front_image_url: frontImageUrl,
+          back_image_url: backImageUrl,
+          position: index,
+          created_at: new Date().toISOString()
+        };
+      }));
+
+      // Insert all cards
+      const { error: cardError } = await supabase
+        .from('flashcards')
+        .insert(processedCards);
+
+      if (cardError) throw cardError;
+
+      // Add the new set to the state at the beginning
+      const newSetWithCards = {
+        ...newSet,
+        flashcards: processedCards
+      };
+      
+      setFlashcardSets(prevSets => [newSetWithCards, ...prevSets]);
+      setShowCustomFlashcardModal(false);
+    } catch (error) {
+      console.error('Error creating custom flashcard:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleShowMore = () => {
+    setDisplayCount(prev => prev + 6);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
       <DashboardNav />
-      
       <main className="container mx-auto px-4 py-8">
         {error ? (
-          <div className="bg-white/10 backdrop-blur-xl rounded-xl p-4 text-red-400 border border-red-500/20">
-            {error}
-          </div>
+          <div className="text-center text-red-500">{error}</div>
         ) : loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-          </div>
+          <div className="text-center">Loading...</div>
         ) : (
           <>
-            {!studyMode && !reviewMode && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h1 className="text-3xl font-bold text-white">Flashcard Sets</h1>
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
-                  >
-                    Create New Set
-                  </button>
-                </div>
-
-                {flashcardSets.length === 0 ? (
-                  <div className="bg-white/10 backdrop-blur-xl rounded-xl p-8 text-center border border-white/20">
-                    <h3 className="text-xl font-semibold text-white mb-4">No Flashcard Sets Yet</h3>
-                    <p className="text-gray-300 mb-6">Create your first set to start studying!</p>
-                    <button
-                      onClick={() => setShowCreateModal(true)}
-                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
-                    >
-                      Create New Set
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {flashcardSets.map((set) => (
-                      <FlashcardSetCard
-                        key={set.id}
-                        set={set}
-                        onStudy={() => handleSetSelect(set)}
-                        onEdit={() => handleEditSet(set)}
-                        onDelete={() => handleDeleteSet(set.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {studyMode && selectedSet && (
+            {studyMode && selectedSet ? (
               <FlashcardStudyView
                 set={selectedSet}
                 onClose={() => {
                   setSelectedSet(null);
                   setStudyMode(false);
-                  router.push('/flashcards', undefined, { shallow: true });
                 }}
               />
-            )}
-
-            {reviewMode && selectedSet && (
+            ) : reviewMode && selectedSet ? (
               <FlashcardStudyReviewView
-                set={selectedSet}
+                setId={selectedSet.id}
                 onClose={() => {
                   setSelectedSet(null);
                   setReviewMode(false);
                 }}
               />
-            )}
-
-            {showCreateModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 max-w-md w-full border border-white/20">
-                  <h3 className="text-xl font-semibold text-white mb-4">Create New Flashcard Set</h3>
-                  <input
-                    type="text"
-                    placeholder="Set Title"
-                    value={newSetTitle}
-                    onChange={(e) => setNewSetTitle(e.target.value)}
-                    className="w-full p-3 mb-4 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <div className="flex justify-end space-x-3">
-                    <button
-                      onClick={() => setShowCreateModal(false)}
-                      className="px-4 py-2 text-gray-300 hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleCreateSet}
-                      disabled={!newSetTitle.trim()}
-                      className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Create
-                    </button>
-                  </div>
+            ) : (
+              <div className="space-y-8">
+                <div className="flex justify-between items-center">
+                  <h1 className="text-3xl font-bold text-white">Flashcard Sets</h1>
+                  <button
+                    onClick={() => setShowCustomFlashcardModal(true)}
+                    className="px-6 py-3 bg-gradient-to-r from-[#4361ee] to-[#4cc9f0] text-white rounded-xl hover:from-[#4cc9f0] hover:to-[#4361ee] transform hover:scale-[1.02] transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
+                  >
+                    Create Custom Set
+                  </button>
                 </div>
+
+                {flashcardSets.length === 0 ? (
+                  <div className="text-center text-white/60">
+                    No flashcard sets yet. Create one to get started!
+                  </div>
+                ) : (
+                  <div className="grid gap-8">
+                    <div className="space-y-4">
+                      <h2 className="text-xl font-semibold text-white/80">Recent Sets</h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {flashcardSets.slice(0, 2).map((set) => (
+                          <FlashcardSetCard
+                            key={set.id}
+                            set={set}
+                            onUpdate={handleSetUpdate}
+                            onDelete={handleDeleteSet}
+                            onStudy={() => handleStudyClick(set)}
+                            onReview={() => handleReviewClick(set)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {flashcardSets.length > 2 && (
+                      <div className="space-y-4">
+                        <h2 className="text-xl font-semibold text-white/80">All Sets</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 opacity-90">
+                          {flashcardSets.slice(2, displayCount + 2).map((set) => (
+                            <FlashcardSetCard
+                              key={set.id}
+                              set={set}
+                              onUpdate={handleSetUpdate}
+                              onDelete={handleDeleteSet}
+                              onStudy={() => handleStudyClick(set)}
+                              onReview={() => handleReviewClick(set)}
+                            />
+                          ))}
+                        </div>
+                        {flashcardSets.length > displayCount + 2 && (
+                          <div className="flex justify-center mt-6">
+                            <button
+                              onClick={handleShowMore}
+                              className="px-6 py-3 bg-[#3c096c]/20 backdrop-blur-xl text-white rounded-xl hover:bg-[#3c096c]/40 transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                            >
+                              Show More Sets
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
       </main>
+      <CreateFlashcardModal
+        isOpen={showCustomFlashcardModal}
+        onClose={() => setShowCustomFlashcardModal(false)}
+        onSave={handleCustomFlashcardSave}
+        isUploading={isUploading}
+      />
     </div>
   );
 }

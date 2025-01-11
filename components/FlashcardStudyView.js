@@ -13,6 +13,8 @@ export default function FlashcardStudyView({ set, onClose }) {
         needsReview: 0
     });
     const [answeredCards, setAnsweredCards] = useState(new Set());
+    const [knownCards, setKnownCards] = useState(0);
+    const [learningCards, setLearningCards] = useState(0);
 
     useEffect(() => {
         if (set) {
@@ -38,6 +40,8 @@ export default function FlashcardStudyView({ set, onClose }) {
             setAnsweredCards(new Set());
             setStudyStats({ total: 0, needsReview: 0 });
             setIsComplete(false);
+            setKnownCards(0);
+            setLearningCards(0);
         } catch (err) {
             console.error('Error loading flashcards:', err);
         } finally {
@@ -110,6 +114,12 @@ export default function FlashcardStudyView({ set, onClose }) {
                 needsReview: prev.needsReview + (!isCorrect ? 1 : 0)
             }));
 
+            if (isCorrect) {
+                setKnownCards(prev => prev + 1);
+            } else {
+                setLearningCards(prev => prev + 1);
+            }
+
             // Move to next card if available
             if (currentIndex < flashcards.length - 1) {
                 handleNext();
@@ -177,6 +187,16 @@ export default function FlashcardStudyView({ set, onClose }) {
                                         style={{ width: `${(currentIndex + 1) / flashcards.length * 100}%` }}
                                     ></div>
                                 </div>
+                                <div className="flex items-center space-x-3 text-sm">
+                                    <div className="flex items-center text-[#4cc9f0]">
+                                        <span className="mr-1">✓</span>
+                                        <span>{knownCards}</span>
+                                    </div>
+                                    <div className="flex items-center text-[#ff758f]">
+                                        <span className="mr-1">✕</span>
+                                        <span>{learningCards}</span>
+                                    </div>
+                                </div>
                             </div>
                             <button
                                 onClick={onClose}
@@ -200,25 +220,55 @@ export default function FlashcardStudyView({ set, onClose }) {
                                 >
                                     {/* Front of card */}
                                     <div className="absolute inset-0 backface-hidden">
-                                        <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c]">
+                                        <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c] relative">
                                             <div className="text-sm text-white/60 mb-4">Question</div>
-                                            <div className="text-2xl text-white text-center font-medium">
-                                                {flashcards[currentIndex]?.front_content}
+                                            <div className="flex-1 w-full flex flex-col items-center justify-center gap-4 overflow-auto pb-12">
+                                                {flashcards[currentIndex]?.front_type === 'image' && (
+                                                    <div className="relative w-full max-w-md mx-auto mb-4">
+                                                        <div className="aspect-w-16 aspect-h-9 flex items-center justify-center rounded-lg overflow-hidden bg-black/10">
+                                                            <img 
+                                                                src={flashcards[currentIndex]?.front_image_url}
+                                                                alt="Front of flashcard"
+                                                                className="max-h-[300px] w-auto object-contain shadow-lg"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {flashcards[currentIndex]?.front_content && (
+                                                    <div className="text-2xl text-white text-center font-medium">
+                                                        {flashcards[currentIndex]?.front_content}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="absolute bottom-4 text-white/60">
+                                            <div className="absolute bottom-4 text-white/60 text-sm">
                                                 Click to flip
                                             </div>
                                         </div>
                                     </div>
                                     {/* Back of card */}
                                     <div className="absolute inset-0 backface-hidden rotate-y-180">
-                                        <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c]">
+                                        <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c] relative">
                                             <div className="text-sm text-white/60 mb-4">Answer</div>
-                                            <div className="text-2xl text-white text-center font-medium">
-                                                {flashcards[currentIndex]?.back_content}
+                                            <div className="flex-1 w-full flex flex-col items-center justify-center gap-4 overflow-auto pb-12">
+                                                {flashcards[currentIndex]?.back_type === 'image' && (
+                                                    <div className="relative w-full max-w-md mx-auto mb-4">
+                                                        <div className="aspect-w-16 aspect-h-9 flex items-center justify-center rounded-lg overflow-hidden bg-black/10">
+                                                            <img 
+                                                                src={flashcards[currentIndex]?.back_image_url}
+                                                                alt="Back of flashcard"
+                                                                className="max-h-[300px] w-auto object-contain shadow-lg"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {flashcards[currentIndex]?.back_content && (
+                                                    <div className="text-2xl text-white text-center font-medium">
+                                                        {flashcards[currentIndex]?.back_content}
+                                                    </div>
+                                                )}
                                             </div>
                                             {!showAnswerButtons && (
-                                                <div className="absolute bottom-4 text-white/60">
+                                                <div className="absolute bottom-4 text-white/60 text-sm">
                                                     Click to flip back
                                                 </div>
                                             )}

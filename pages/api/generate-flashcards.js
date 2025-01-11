@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
     // Add timeout for the entire operation
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Operation timed out')), 50000)
+      setTimeout(() => reject(new Error('Operation timed out')), 300000) // 5 minutes timeout
     );
 
     const generationPromise = (async () => {

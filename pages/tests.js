@@ -9,10 +9,9 @@ export default function Tests() {
   const router = useRouter();
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedTest, setSelectedTest] = useState(null);
-  const [activeTab, setActiveTab] = useState('recent');
-  const [currentPage, setCurrentPage] = useState(1);
-  const testsPerPage = 6;
+  const [displayCount, setDisplayCount] = useState(6);
 
   useEffect(() => {
     fetchTests();
@@ -31,7 +30,7 @@ export default function Tests() {
   const fetchTests = async () => {
     try {
       setLoading(true);
-      
+
       // Get current user session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
@@ -73,7 +72,7 @@ export default function Tests() {
       setTests(testsData || []);
     } catch (error) {
       console.error('Error in fetchTests:', error);
-      setTests([]); // Set empty array on error
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -135,111 +134,82 @@ export default function Tests() {
     }));
   };
 
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-        </div>
-      );
-    }
-
-    if (tests.length === 0) {
-      return (
-        <div className="bg-[#560bad]/30 backdrop-blur-xl rounded-lg p-8 text-center border border-white/20">
-          <h3 className="text-lg font-medium text-white mb-2">No Tests Created</h3>
-          <p className="text-white/80">Start by uploading study material to generate tests.</p>
-        </div>
-      );
-    }
-
-    const startIndex = (currentPage - 1) * testsPerPage;
-    const endIndex = startIndex + testsPerPage;
-    const currentTests = activeTab === 'starred'
-      ? tests.filter(test => test.starred)
-      : tests;
-    const paginatedTests = currentTests.slice(startIndex, endIndex);
-
-    return (
-      <div>
-        <div className="flex space-x-4 mb-6">
-          <button
-            onClick={() => setActiveTab('recent')}
-            className={`px-4 py-2 rounded-lg transition-all ${
-              activeTab === 'recent'
-                ? 'bg-[#4361ee] text-white'
-                : 'text-white/80 hover:bg-[#4895ef]/20'
-            }`}
-          >
-            Recent
-          </button>
-          <button
-            onClick={() => setActiveTab('starred')}
-            className={`px-4 py-2 rounded-lg transition-all ${
-              activeTab === 'starred'
-                ? 'bg-[#4361ee] text-white'
-                : 'text-white/80 hover:bg-[#4895ef]/20'
-            }`}
-          >
-            Starred
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {paginatedTests.map((test) => (
-            <TestCard
-              key={test.id}
-              test={test}
-              onSelect={() => handleTestSelect(test)}
-              onStarClick={(e) => handleStarClick(e, test)}
-            />
-          ))}
-        </div>
-
-        {currentTests.length > testsPerPage && (
-          <div className="mt-6 flex justify-center space-x-2">
-            {Array.from({ length: Math.ceil(currentTests.length / testsPerPage) }).map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentPage(index + 1)}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  currentPage === index + 1
-                    ? 'bg-[#4361ee] text-white'
-                    : 'text-white/80 hover:bg-[#4895ef]/20'
-                }`}
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  const handleShowMore = () => {
+    setDisplayCount(prev => prev + 6);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#10002b] to-[#240046]">
       <DashboardNav />
-      <div className="container mx-auto px-6 py-12">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">My Tests</h1>
-          <p className="text-white/90 text-lg">Generate and take tests to assess your knowledge.</p>
-        </div>
-        {selectedTest && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <InteractiveTest
-              test={selectedTest}
-              onClose={() => {
-                setSelectedTest(null);
-                router.push('/tests', undefined, { shallow: true });
-              }}
-              onUpdate={handleTestUpdate}
-              onTestComplete={handleTestComplete}
-            />
+      <main className="container mx-auto px-4 py-8">
+        {error ? (
+          <div className="text-center text-red-500">{error}</div>
+        ) : loading ? (
+          <div className="text-center">Loading...</div>
+        ) : (
+          <div className="space-y-8">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-bold text-white">Test Sets</h1>
+            </div>
+
+            {tests.length === 0 ? (
+              <div className="text-center text-white/60">
+                No tests yet. Create one to get started!
+              </div>
+            ) : (
+              <div className="grid gap-8">
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-white/80">Recent Tests</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {tests.slice(0, 2).map((test) => (
+                      <TestCard
+                        key={test.id}
+                        test={test}
+                        onSelect={() => handleTestSelect(test)}
+                        onStarClick={(e) => handleStarClick(e, test)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {tests.length > 2 && (
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-semibold text-white/80">All Tests</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 opacity-90">
+                      {tests.slice(2, displayCount + 2).map((test) => (
+                        <TestCard
+                          key={test.id}
+                          test={test}
+                          onSelect={() => handleTestSelect(test)}
+                          onStarClick={(e) => handleStarClick(e, test)}
+                        />
+                      ))}
+                    </div>
+                    {tests.length > displayCount + 2 && (
+                      <div className="flex justify-center mt-6">
+                        <button
+                          onClick={handleShowMore}
+                          className="px-6 py-3 bg-[#3c096c]/20 backdrop-blur-xl text-white rounded-xl hover:bg-[#3c096c]/40 transform hover:scale-[1.02] transition-all duration-200 font-medium"
+                        >
+                          Show More Tests
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
-        {!selectedTest && renderContent()}
-      </div>
+      </main>
+      {selectedTest && (
+        <InteractiveTest
+          test={selectedTest}
+          onClose={() => setSelectedTest(null)}
+          onUpdate={handleTestUpdate}
+          onTestComplete={handleTestComplete}
+        />
+      )}
     </div>
   );
 }

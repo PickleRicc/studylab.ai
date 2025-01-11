@@ -1,4 +1,5 @@
 import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol } from '@azure/storage-blob';
+import * as fs from 'fs';
 
 /**
  * Azure Blob Storage utility functions for file operations
@@ -178,4 +179,65 @@ export class AzureStorageService {
 
         return buffer;
     }
+}
+
+// Separate configuration for flashcard images
+export const flashcardStorage = {
+  async uploadImage(file, userId, side) {
+    const blobServiceClient = BlobServiceClient.fromConnectionString(
+      process.env.AZURE_STORAGE_CONNECTION_STRING
+    );
+    const containerClient = blobServiceClient.getContainerClient('flashcard-images');
+    
+    // Create container if it doesn't exist (private by default)
+    await containerClient.createIfNotExists();
+    
+    const blobName = `${userId}/${Date.now()}-${side}-${file.originalFilename || file.newFilename}`;
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    
+    const fileBuffer = await fs.promises.readFile(file.filepath);
+    await blockBlobClient.uploadData(fileBuffer, {
+      blobHTTPHeaders: { blobContentType: file.mimetype }
+    });
+    
+    return blobName; // Return the path instead of the URL
+  },
+
+  async getImage(blobPath) {
+    const blobServiceClient = BlobServiceClient.fromConnectionString(
+      process.env.AZURE_STORAGE_CONNECTION_STRING
+    );
+    const containerClient = blobServiceClient.getContainerClient('flashcard-images');
+    const blobClient = containerClient.getBlobClient(blobPath);
+    
+    return await blobClient.download();
+  }
+};
+
+/**
+ * Simple function to upload flashcard images to Azure Blob Storage
+ * @param {File} imageFile - The image file to upload
+ * @param {string} userId - The user's ID
+ * @param {string} side - Which side of the card ('front' or 'back')
+ * @returns {Promise<string>} The URL of the uploaded image
+ */
+export async function uploadFlashcardImage(imageFile, userId, side) {
+  const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.NEXT_PUBLIC_AZURE_STORAGE_CONNECTION_STRING);
+  const containerClient = blobServiceClient.getContainerClient('flashcard-images');
+  
+  // Ensure container exists
+  await containerClient.createIfNotExists();
+  
+  // Create unique blob name
+  const blobName = `${userId}/${Date.now()}-${side}-${imageFile.name}`;
+  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+  
+  // Upload the image
+  await blockBlobClient.uploadData(imageFile, {
+    blobHTTPHeaders: {
+      blobContentType: imageFile.type
+    }
+  });
+  
+  return blockBlobClient.url;
 }

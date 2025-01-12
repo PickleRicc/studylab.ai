@@ -1,5 +1,6 @@
 import { processFile } from '../../utils/fileProcessor';
 
+// Test deployment - Process API endpoint for file processing
 export const config = {
   api: {
     bodyParser: false,

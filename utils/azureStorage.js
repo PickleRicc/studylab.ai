@@ -189,18 +189,28 @@ export const flashcardStorage = {
     );
     const containerClient = blobServiceClient.getContainerClient('flashcard-images');
     
-    // Create container if it doesn't exist (private by default)
+    // Create container if it doesn't exist
     await containerClient.createIfNotExists();
     
-    const blobName = `${userId}/${Date.now()}-${side}-${file.originalFilename || file.newFilename}`;
+    const blobName = `${userId}/${Date.now()}-${side}-${file.originalFilename}`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     
-    const fileBuffer = await fs.promises.readFile(file.filepath);
-    await blockBlobClient.uploadData(fileBuffer, {
-      blobHTTPHeaders: { blobContentType: file.mimetype }
-    });
-    
-    return blobName; // Return the path instead of the URL
+    try {
+      // Read the file as a buffer
+      const fileBuffer = await fs.promises.readFile(file.filepath);
+      
+      // Upload the buffer to Azure
+      await blockBlobClient.uploadData(fileBuffer, {
+        blobHTTPHeaders: { 
+          blobContentType: file.mimetype || 'application/octet-stream'
+        }
+      });
+      
+      return blockBlobClient.url;
+    } catch (error) {
+      console.error('Error in uploadImage:', error);
+      throw new Error(`Failed to upload image: ${error.message}`);
+    }
   },
 
   async getImage(blobPath) {

@@ -223,13 +223,17 @@ export default function FlashcardStudyView({ set, onClose }) {
                                         <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c] relative">
                                             <div className="text-sm text-white/60 mb-4">Question</div>
                                             <div className="flex-1 w-full flex flex-col items-center justify-center gap-4 overflow-auto pb-12">
-                                                {flashcards[currentIndex]?.front_type === 'image' && (
+                                                {flashcards[currentIndex]?.front_type === 'image' && flashcards[currentIndex]?.front_image_url && (
                                                     <div className="relative w-full max-w-md mx-auto mb-4">
                                                         <div className="aspect-w-16 aspect-h-9 flex items-center justify-center rounded-lg overflow-hidden bg-black/10">
                                                             <img 
                                                                 src={flashcards[currentIndex]?.front_image_url}
                                                                 alt="Front of flashcard"
                                                                 className="max-h-[300px] w-auto object-contain shadow-lg"
+                                                                onError={(e) => {
+                                                                    console.error('Error loading image:', e.target.src);
+                                                                    e.target.src = '/placeholder-image.svg';
+                                                                }}
                                                             />
                                                         </div>
                                                     </div>
@@ -250,13 +254,17 @@ export default function FlashcardStudyView({ set, onClose }) {
                                         <div className="h-full bg-[#3c096c]/20 backdrop-blur-xl rounded-2xl p-8 flex flex-col items-center justify-center border border-[#3c096c] relative">
                                             <div className="text-sm text-white/60 mb-4">Answer</div>
                                             <div className="flex-1 w-full flex flex-col items-center justify-center gap-4 overflow-auto pb-12">
-                                                {flashcards[currentIndex]?.back_type === 'image' && (
+                                                {flashcards[currentIndex]?.back_type === 'image' && flashcards[currentIndex]?.back_image_url && (
                                                     <div className="relative w-full max-w-md mx-auto mb-4">
                                                         <div className="aspect-w-16 aspect-h-9 flex items-center justify-center rounded-lg overflow-hidden bg-black/10">
                                                             <img 
                                                                 src={flashcards[currentIndex]?.back_image_url}
                                                                 alt="Back of flashcard"
                                                                 className="max-h-[300px] w-auto object-contain shadow-lg"
+                                                                onError={(e) => {
+                                                                    console.error('Error loading image:', e.target.src);
+                                                                    e.target.src = '/placeholder-image.svg';
+                                                                }}
                                                             />
                                                         </div>
                                                     </div>

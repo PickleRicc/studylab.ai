@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
+import { createBrowserClient } from '@supabase/ssr';
+import { useRouter } from 'next/router';
 import DashboardNav from '../components/DashboardNav';
 import FlashcardSetCard from '../components/FlashcardSetCard';
 import FlashcardStudyView from '../components/FlashcardStudyView';
 import FlashcardStudyReviewView from '../components/FlashcardStudyReviewView';
 import CreateFlashcardModal from '../components/CreateFlashcardModal';
-import { useRouter } from 'next/router';
 
 export default function Flashcards() {
   const router = useRouter();
+  const [session, setSession] = useState(null);
+  const [supabase] = useState(() => createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ));
+  
   const [flashcardSets, setFlashcardSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,7 +26,35 @@ export default function Flashcards() {
   const [displayCount, setDisplayCount] = useState(6);
 
   useEffect(() => {
-    loadFlashcardSets();
+    const getSession = async () => {
+      try {
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        
+        setSession(currentSession);
+        
+        if (!currentSession) {
+          router.push('/auth/signin');
+          return;
+        }
+        
+        fetchFlashcardSets(currentSession);
+      } catch (error) {
+        console.error('Error getting session:', error);
+        setError(error.message);
+      }
+    };
+
+    getSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) {
+        router.push('/auth/signin');
+      }
+    });
+
+    return () => subscription?.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -34,33 +68,20 @@ export default function Flashcards() {
     }
   }, [router.query, flashcardSets]);
 
-  const loadFlashcardSets = async () => {
+  const fetchFlashcardSets = async (session) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('Please log in to view your flashcard sets');
-        setLoading(false);
-        return;
-      }
-
-      const { data: sets, error: setsError } = await supabase
+      setLoading(true);
+      const { data, error } = await supabase
         .from('flashcard_sets')
-        .select('*, flashcards!inner(*)')
-        .eq('user_id', user.id)
+        .select('*')
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (setsError) throw setsError;
-
-      // Sort flashcards by position within each set
-      const sortedSets = sets?.map(set => ({
-        ...set,
-        flashcards: [...set.flashcards].sort((a, b) => a.position - b.position)
-      })) || [];
-
-      setFlashcardSets(sortedSets);
-    } catch (err) {
-      console.error('Error loading flashcard sets:', err);
-      setError('Failed to load flashcard sets');
+      if (error) throw error;
+      setFlashcardSets(data || []);
+    } catch (error) {
+      console.error('Error fetching flashcard sets:', error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -332,6 +353,7 @@ export default function Flashcards() {
         onClose={() => setShowCustomFlashcardModal(false)}
         onSave={handleCustomFlashcardSave}
         isUploading={isUploading}
+        session={session}
       />
     </div>
   );

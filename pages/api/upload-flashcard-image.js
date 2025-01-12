@@ -1,11 +1,65 @@
 import formidable from 'formidable';
 import { flashcardStorage } from '@/utils/azureStorage';
 import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 export const config = {
   api: {
     bodyParser: false,
   },
+};
+
+const parseForm = async (req) => {
+  return new Promise((resolve, reject) => {
+    // Create upload directory if it doesn't exist
+    const uploadDir = path.join(os.tmpdir(), 'studylab-uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const form = formidable({
+      uploadDir,
+      keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+    });
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        console.error('Form parse error:', err);
+        reject(err);
+        return;
+      }
+
+      // Convert arrays to single values
+      const parsedFields = Object.fromEntries(
+        Object.entries(fields).map(([key, value]) => [
+          key,
+          Array.isArray(value) ? value[0] : value,
+        ])
+      );
+
+      // Handle file arrays
+      const parsedFiles = Object.fromEntries(
+        Object.entries(files).map(([key, value]) => [
+          key,
+          Array.isArray(value) ? value[0] : value,
+        ])
+      );
+
+      console.log('Parsed form data:', {
+        fields: parsedFields,
+        fileInfo: parsedFiles.file ? {
+          filepath: parsedFiles.file.filepath,
+          originalFilename: parsedFiles.file.originalFilename,
+          mimetype: parsedFiles.file.mimetype,
+          size: parsedFiles.file.size
+        } : null
+      });
+
+      resolve({ fields: parsedFields, files: parsedFiles });
+    });
+  });
 };
 
 export default async function handler(req, res) {
@@ -14,60 +68,44 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse the multipart form data
-    const form = formidable({
-      keepExtensions: true,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      multiples: true,
-    });
-
-    const [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) {
-          console.error('Form parsing error:', err);
-          reject(err);
-          return;
-        }
-        resolve([fields, files]);
-      });
-    });
-
-    // Log the received data for debugging
-    console.log('Received fields:', fields);
-    console.log('Received files:', files);
-
-    // Get the first file if it's an array
-    const fileObj = Array.isArray(files.file) ? files.file[0] : files.file;
+    const { fields, files } = await parseForm(req);
+    const file = files.file;
     const userId = fields.userId;
     const side = fields.side;
 
-    if (!fileObj || !userId || !side) {
-      const missing = { 
-        file: !fileObj, 
-        userId: !userId, 
-        side: !side 
-      };
-      console.error('Missing required fields:', missing);
+    if (!file || !userId || !side) {
       return res.status(400).json({ 
         error: 'Missing required fields',
-        missing 
+        received: { 
+          file: file ? {
+            hasFilepath: !!file.filepath,
+            originalFilename: file.originalFilename,
+            mimetype: file.mimetype
+          } : null,
+          userId, 
+          side 
+        }
       });
     }
 
-    // Upload to Azure and get the blob path
-    const blobPath = await flashcardStorage.uploadImage(fileObj, userId, side);
+    // Upload the image and get the URL
+    const url = await flashcardStorage.uploadImage(file, userId, side);
+    console.log('Image uploaded successfully:', { url });
 
-    // Clean up temp file
-    await fs.promises.unlink(fileObj.filepath);
+    // Clean up the temporary file
+    try {
+      await fs.promises.unlink(file.filepath);
+    } catch (err) {
+      console.error('Error deleting temp file:', err);
+    }
 
-    // Return the path that can be used with our proxy API
-    const imageUrl = `/api/flashcard-image/${blobPath}`;
-    return res.status(200).json({ url: imageUrl });
+    res.status(200).json({ url });
   } catch (error) {
-    console.error('General error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message 
+    console.error('Error uploading file:', error);
+    res.status(500).json({ 
+      error: 'Error uploading file',
+      message: error.message,
+      stack: error.stack
     });
   }
 }

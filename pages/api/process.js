@@ -2,7 +2,8 @@ import { processFile } from '../../utils/fileProcessor';
 
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: false,  // Keep bodyParser disabled for file uploads
+    maxDurationInSeconds: 300,  // 5 minutes timeout
   },
 };
 

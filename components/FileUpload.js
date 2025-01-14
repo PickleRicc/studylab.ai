@@ -24,6 +24,7 @@ export default function FileUpload({ onSuccess }) {
     const [selectedFiles, setSelectedFiles] = useState([])
     const [showPreviousFiles, setShowPreviousFiles] = useState(false)
     const [loadingStoredFile, setLoadingStoredFile] = useState(false)
+    const VERCEL_LIMIT = 4.5 * 1024 * 1024;
 
     useEffect(() => {
         loadPreviousFiles()
@@ -121,34 +122,56 @@ export default function FileUpload({ onSuccess }) {
                 const file = acceptedFiles[i]
                 setCurrentFile(file.name)
                 
-                // Calculate overall progress considering both upload and processing for each file
+                // Calculate overall progress
                 const baseProgress = (i / totalFiles) * 100
                 setUploadProgress(baseProgress)
 
                 console.log(`Processing file ${i + 1} of ${totalFiles}: ${file.name}`)
 
-                // Upload file (first 50% of progress for current file)
-                setUploadProgress(baseProgress + (50 / totalFiles))
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    headers: {
-                        'x-file-name': file.name,
-                        'content-type': file.type,
-                        'x-user-id': session.user.id
-                    },
-                    body: file
-                })
+                let response;
+                if (file.size > 4.5 * 1024 * 1024) {
+                    // For large files, get upload URL
+                    response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {
+                            'x-file-name': file.name,
+                            'content-type': file.type,
+                            'x-user-id': session.user.id,
+                            'x-file-size': file.size.toString(),
+                            'x-large-file': 'true'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Upload directly to Azure using the SAS URL
+                    await fetch(data.uploadUrl, {
+                        method: 'PUT',
+                        headers: {
+                            'x-ms-blob-type': 'BlockBlob',
+                            'Content-Type': file.type
+                        },
+                        body: file
+                    });
 
-                if (!response.ok) {
-                    const error = await response.json()
-                    throw new Error(error.message)
+                    results.push(data.file);
+                } else {
+                    // Standard upload for small files
+                    response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {
+                            'x-file-name': file.name,
+                            'content-type': file.type,
+                            'x-user-id': session.user.id
+                        },
+                        body: file
+                    });
+
+                    const data = await response.json();
+                    results.push(data.file);
                 }
 
-                const data = await response.json()
-                results.push(data.file)
-
                 // Process the file
-                setUploadProgress(baseProgress + (75 / totalFiles))
                 const processResponse = await fetch('/api/process', {
                     method: 'POST',
                     headers: {

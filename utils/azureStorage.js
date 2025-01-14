@@ -1,4 +1,4 @@
-import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol } from '@azure/storage-blob';
+import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol, BlobSASSignatureValues } from '@azure/storage-blob';
 import * as fs from 'fs';
 
 /**
@@ -17,6 +17,27 @@ export class AzureStorageService {
         const [accountName, accountKey] = this.parseConnectionString(connectionString);
         this.sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
         this.accountName = accountName;
+
+        // Set up CORS rules
+        this.setupCors();
+    }
+
+    async setupCors() {
+        try {
+            const serviceClient = this.blobServiceClient;
+            const properties = await serviceClient.getProperties();
+            properties.cors = [{
+                allowedOrigins: "*",
+                allowedMethods: "PUT,GET,HEAD,POST,OPTIONS",
+                allowedHeaders: "*",
+                exposedHeaders: "*",
+                maxAgeInSeconds: 3600
+            }];
+            await serviceClient.setProperties(properties);
+            console.log('CORS rules set successfully');
+        } catch (error) {
+            console.error('Error setting CORS rules:', error);
+        }
     }
 
     /**
@@ -138,6 +159,54 @@ export class AzureStorageService {
         console.log('Generated SAS URL length:', sasUrl.length);
         
         return sasUrl;
+    }
+
+    /**
+     * Generate a direct upload URL for large files
+     * @param {string} blobName - The blob name
+     * @param {Object} metadata - Optional metadata for the blob
+     * @returns {Promise<{sasUrl: string, name: string}>}
+     */
+    async generateUploadUrl(blobName, metadata = {}) {
+        console.log('Generating direct upload URL for:', blobName);
+        
+        const containerClient = this.blobServiceClient.getContainerClient('studylab-files');
+        await containerClient.createIfNotExists();
+        
+        const blobClient = containerClient.getBlockBlobClient(blobName);
+
+        const startsOn = new Date();
+        const expiresOn = new Date(startsOn);
+        expiresOn.setMinutes(startsOn.getMinutes() + 30);
+
+        const permissions = new BlobSASPermissions();
+        permissions.read = true;
+        permissions.write = true;
+        permissions.create = true;
+        permissions.add = true;
+
+        const sasOptions = {
+            containerName: containerClient.containerName,
+            blobName: blobName,
+            permissions: permissions,
+            startsOn,
+            expiresOn,
+            contentType: metadata.contentType,
+            protocol: SASProtocol.Https
+        };
+
+        const sasToken = generateBlobSASQueryParameters(
+            sasOptions,
+            this.sharedKeyCredential
+        ).toString();
+
+        const sasUrl = `${blobClient.url}?${sasToken}`;
+        console.log('Generated direct upload URL');
+
+        return {
+            sasUrl,
+            name: blobName
+        };
     }
 
     /**

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function middleware(req) {
   const res = NextResponse.next()
+  res.headers.set('Accept', '*/*')  // Add this line to fix 406 error
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

@@ -23,7 +23,7 @@ export default function DashboardNav() {
             if (profileError || !profile) {
                 const { data: newProfile, error: createError } = await supabase
                     .from('profiles')
-                    .insert([{ id: user.id, email: user.email }])
+                    .insert([{ id: user.id }])
                     .select()
                     .single()
 
@@ -31,9 +31,10 @@ export default function DashboardNav() {
                 profile = newProfile
             }
 
-            setUserName(profile.email)
+            setUserName(profile.full_name || 'User')
         } catch (error) {
             console.error('Error getting user name:', error)
+            setUserName('User') // Fallback name
         }
     }
 

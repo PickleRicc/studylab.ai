@@ -175,15 +175,28 @@ export class AzureStorageService {
         
         const blobClient = containerClient.getBlockBlobClient(blobName);
 
+        // Set start time 5 minutes in the past to account for clock differences
         const startsOn = new Date();
-        const expiresOn = new Date(startsOn);
-        expiresOn.setMinutes(startsOn.getMinutes() + 30);
+        startsOn.setMinutes(startsOn.getMinutes() - 5);
+
+        // Set expiry 30 minutes from current time
+        const expiresOn = new Date();
+        expiresOn.setMinutes(expiresOn.getMinutes() + 30);
+
+        console.log('SAS Token timing:', {
+            startsOn: startsOn.toISOString(),
+            expiresOn: expiresOn.toISOString(),
+            currentTime: new Date().toISOString()
+        });
 
         const permissions = new BlobSASPermissions();
         permissions.read = true;
         permissions.write = true;
         permissions.create = true;
         permissions.add = true;
+        permissions.delete = true;
+        permissions.tag = true;
+        permissions.list = true;
 
         const sasOptions = {
             containerName: containerClient.containerName,
@@ -191,9 +204,10 @@ export class AzureStorageService {
             permissions: permissions,
             startsOn,
             expiresOn,
-            contentType: metadata.contentType,
             protocol: SASProtocol.Https
         };
+
+        console.log('Generating SAS token with permissions:', permissions.toString());
 
         const sasToken = generateBlobSASQueryParameters(
             sasOptions,
@@ -201,8 +215,8 @@ export class AzureStorageService {
         ).toString();
 
         const sasUrl = `${blobClient.url}?${sasToken}`;
-        console.log('Generated direct upload URL');
-
+        console.log('Generated upload URL with permissions');
+        
         return {
             sasUrl,
             name: blobName
@@ -247,6 +261,27 @@ export class AzureStorageService {
         console.log('Downloaded blob size:', buffer.length);
 
         return buffer;
+    }
+
+    /**
+     * Download a blob from Azure Storage
+     * @param {string} blobName - The name of the blob to download
+     * @returns {Promise<Buffer>} The file content as a buffer
+     */
+    async downloadBlob(blobName) {
+        const containerClient = this.blobServiceClient.getContainerClient('studylab-files');
+        // Create container if it doesn't exist
+        await containerClient.createIfNotExists();
+        
+        const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+        const downloadResponse = await blockBlobClient.download(0);
+        const chunks = [];
+        
+        for await (const chunk of downloadResponse.readableStreamBody) {
+            chunks.push(chunk);
+        }
+        
+        return Buffer.concat(chunks);
     }
 }
 

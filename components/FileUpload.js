@@ -130,6 +130,7 @@ export default function FileUpload({ onSuccess }) {
 
                 let response;
                 if (file.size > 4.5 * 1024 * 1024) {
+                    console.log('Handling large file upload:', file.name);
                     // For large files, get upload URL
                     response = await fetch('/api/upload', {
                         method: 'POST',
@@ -143,9 +144,10 @@ export default function FileUpload({ onSuccess }) {
                     });
                     
                     const data = await response.json();
+                    console.log('Got upload URL:', data.uploadUrl);
                     
                     // Upload directly to Azure using the SAS URL
-                    await fetch(data.uploadUrl, {
+                    const azureResponse = await fetch(data.uploadUrl, {
                         method: 'PUT',
                         headers: {
                             'x-ms-blob-type': 'BlockBlob',
@@ -153,6 +155,20 @@ export default function FileUpload({ onSuccess }) {
                         },
                         body: file
                     });
+
+                    if (!azureResponse.ok) {
+                        const errorText = await azureResponse.text();
+                        console.error('Azure upload failed:', {
+                            status: azureResponse.status,
+                            statusText: azureResponse.statusText,
+                            error: errorText
+                        });
+                        throw new Error(`Failed to upload to Azure: ${azureResponse.status} ${azureResponse.statusText}`);
+                    }
+
+                    console.log('Azure upload successful');
+                    // Wait a moment for Azure to process the upload
+                    await new Promise(resolve => setTimeout(resolve, 1000));
 
                     results.push(data.file);
                 } else {
@@ -172,32 +188,13 @@ export default function FileUpload({ onSuccess }) {
                 }
 
                 // Process the file
-                const processResponse = await fetch('/api/process', {
-                    method: 'POST',
-                    headers: {
-                        'x-file-name': file.name
-                    },
-                    body: file
-                })
-
-                if (!processResponse.ok) {
-                    const error = await processResponse.json()
-                    throw new Error(error.message)
-                }
-
-                const processedData = await processResponse.json()
-                console.log(`File processed successfully: ${file.name}`, {
-                    type: processedData.info.type,
-                    size: file.size,
-                    ...(processedData.numPages && { pages: processedData.numPages }),
-                    ...(processedData.info.format && { format: processedData.info.format })
-                })
+                const processResponse = await processFile(file, results[i])
 
                 // Add to processed files array
                 processedContents.push({
-                    ...processedData,
+                    ...processResponse,
                     fileName: file.name
-                })
+                });
 
                 // Update progress for completed file
                 setUploadProgress(baseProgress + (100 / totalFiles))
@@ -217,6 +214,31 @@ export default function FileUpload({ onSuccess }) {
             setCurrentFile(null)
         }
     }
+
+    const processFile = async (file, uploadResult) => {
+        try {
+            const response = await fetch('/api/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    blobName: uploadResult.blob_name,
+                    fileName: file.name
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Processing failed');
+            }
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('Processing error:', error);
+            throw error;
+        }
+    };
 
     const handleGenerateTest = async (config) => {
         try {

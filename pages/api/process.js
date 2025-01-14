@@ -1,8 +1,9 @@
 import { processFile } from '../../utils/fileProcessor';
+import { AzureStorageService } from '../../utils/azureStorage';
 
 export const config = {
   api: {
-    bodyParser: false,  // Keep bodyParser disabled for file uploads
+    bodyParser: true,  // We can enable bodyParser since we're only receiving JSON now
     maxDurationInSeconds: 300,  // 5 minutes timeout
   },
 };
@@ -15,19 +16,15 @@ export default async function handler(req, res) {
   try {
     console.log('=== Starting File Processing ===');
     
-    // Get filename from headers
-    const fileName = req.headers['x-file-name'];
-    if (!fileName) {
-      throw new Error('Filename not provided');
+    const { blobName, fileName } = req.body;
+    if (!blobName || !fileName) {
+      throw new Error('Blob name or filename not provided');
     }
     console.log('Processing file:', fileName);
 
-    // Get file data from the request
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
+    // Initialize Azure Storage and get the file
+    const azureStorage = new AzureStorageService();
+    const buffer = await azureStorage.downloadBlob(blobName);
     console.log('File size:', (buffer.length / 1024).toFixed(2), 'KB');
 
     // Process the file

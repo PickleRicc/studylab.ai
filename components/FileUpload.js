@@ -88,9 +88,19 @@ export default function FileUpload({ onSuccess }) {
 
             const data = await response.json();
             
+            // Create a file-like object to match the upload pattern
+            const fileObject = {
+                name: data.file.name,
+                type: data.file.type,
+                size: data.file.size
+            };
+            
+            // Process using the same pattern as new uploads
+            const processResponse = await processFile(fileObject, data.file);
+            
             // Add to processed files
             setProcessedFiles(prev => [...prev, {
-                ...data.file,
+                ...processResponse,
                 isStored: true
             }]);
 

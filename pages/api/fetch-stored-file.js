@@ -64,31 +64,24 @@ export default async function handler(req, res) {
         const azureStorage = new AzureStorageService();
         
         try {
-            // Download the blob directly using Azure SDK
-            console.log('Downloading blob:', file.blob_name);
-            const containerName = 'studylab-files';
-            const buffer = await azureStorage.downloadBlob(containerName, file.blob_name);
+            // Generate SAS URL for the blob
+            console.log('Generating SAS URL for blob:', file.blob_name);
+            const { sasUrl } = await azureStorage.generateUploadUrl(file.blob_name);
 
-            console.log('Successfully downloaded file, size:', buffer.length);
-
-            // Process the file
-            const processedContent = await processFile(buffer, file.file_name);
-
-            // Return processed content
+            // Return file metadata and SAS URL
             return res.status(200).json({
                 file: {
                     id: file.id,
                     name: file.file_name,
                     type: file.file_type,
                     size: file.file_size,
-                    content: processedContent.text,
-                    chunks: processedContent.chunks,
-                    info: processedContent.info
-                }
+                    blob_name: file.blob_name
+                },
+                uploadUrl: sasUrl
             });
 
         } catch (error) {
-            console.error('Error processing file:', error);
+            console.error('Error generating SAS URL:', error);
             return res.status(500).json({ 
                 error: 'Error processing file',
                 message: error.message

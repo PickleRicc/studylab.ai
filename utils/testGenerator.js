@@ -1,35 +1,36 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
+import { supabase } from './supabase';
 
 // Define the test question structure
 export const testQuestionSchema = {
-  type: "object",
-  properties: {
-    questions: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          type: { type: "string", enum: ["multiple_choice", "short_answer"] },
-          question: { type: "string" },
-          options: { 
+    type: "object",
+    properties: {
+        questions: {
             type: "array",
-            items: { type: "string" },
-            optional: true 
-          },
-          correctAnswer: { type: "string" },
-          explanation: { type: "string" }
-        },
-        required: ["id", "type", "question", "correctAnswer", "explanation"]
-      }
+            items: {
+                type: "object",
+                properties: {
+                    id: { type: "string" },
+                    type: { type: "string", enum: ["multiple_choice", "short_answer"] },
+                    question: { type: "string" },
+                    options: { 
+                        type: "array",
+                        items: { type: "string" },
+                        optional: true 
+                    },
+                    correctAnswer: { type: "string" },
+                    explanation: { type: "string" }
+                },
+                required: ["id", "type", "question", "correctAnswer", "explanation"]
+            }
+        }
     }
-  }
 };
 
 /**
- * Generates test questions from multiple content sources
+ * Generates test questions from multiple content sources with progress tracking
  * @param {Array} contentSources - Array of content objects with text and metadata
  * @param {Object} config - Test configuration options
  * @returns {Promise<Object>} Object containing generated questions
@@ -50,7 +51,7 @@ export async function generateTest(contentSources, config) {
         });
 
         const model = new ChatOpenAI({
-            modelName: "gpt-4o",
+            modelName: "gpt-4",
             temperature: 0.2,
         });
 
@@ -72,99 +73,71 @@ Example format:
             "options": ["Option A", "Option B", "Option C", "Option D"],
             "correctAnswer": "Option A",
             "explanation": "Explanation of why this is correct"
-        },
-        {
-            "question": "The actual question text",
-            "type": "short_answer",
-            "correctAnswer": "The brief answer",
-            "explanation": "Explanation of why this is correct"
         }
     ]
-}
-
-Generate an equal mix of the following question types: ${config.questionTypes.join(', ')}.
-DO NOT include any other text, markdown formatting, or code blocks. Return ONLY the JSON object.`;
+}`;
 
         const parser = new JsonOutputParser();
         let allQuestions = [];
+        let totalQuestionsGenerated = 0;
 
         // Calculate questions per type
-        const questionsPerType = Math.floor(config.numQuestions / config.questionTypes.length);
-        const remainingQuestions = config.numQuestions % config.questionTypes.length;
-        
-        // Create a map of how many questions we need for each type
-        const questionTypeCount = config.questionTypes.reduce((acc, type, index) => {
-            acc[type] = questionsPerType + (index < remainingQuestions ? 1 : 0);
-            return acc;
-        }, {});
+        const questionsPerType = {};
+        config.questionTypes.forEach(type => {
+            questionsPerType[type] = Math.floor(config.numQuestions / config.questionTypes.length);
+        });
 
-        console.log('Questions per type:', questionTypeCount);
+        // Distribute remaining questions
+        let remaining = config.numQuestions - (questionsPerType[config.questionTypes[0]] * config.questionTypes.length);
+        let typeIndex = 0;
+        while (remaining > 0) {
+            questionsPerType[config.questionTypes[typeIndex]]++;
+            typeIndex = (typeIndex + 1) % config.questionTypes.length;
+            remaining--;
+        }
 
-        // Optimize chunks needed based on total questions
-        const questionsPerChunk = 3;
-        const chunksNeeded = Math.ceil(config.numQuestions / questionsPerChunk);
-        const chunksPerSource = Math.ceil(chunksNeeded / contentSources.length);
+        console.log('Questions per type:', questionsPerType);
 
-        // Process sources in parallel
-        const processedSources = await Promise.all(contentSources.map(async (source) => {
-            if (allQuestions.length >= config.numQuestions) return [];
+        // Prepare content chunks
+        let allChunks = [];
+        contentSources.forEach(source => {
+            const chunks = source.chunks || (source.content ? [{ pageContent: source.content, metadata: { chunkIndex: 0 } }] : []);
+            allChunks = allChunks.concat(chunks.map(chunk => ({
+                ...chunk,
+                source: source.source || 'Unknown'
+            })));
+        });
 
-            // If no chunks available, create a single chunk from content
-            let chunks = source.chunks || [];
-            if (chunks.length === 0 && source.content) {
-                chunks = [{
-                    pageContent: source.content,
-                    metadata: { chunkIndex: 0 }
-                }];
-            }
+        // Select distributed chunks
+        const QUESTIONS_PER_BATCH = 5;
+        const MAX_RETRIES = 3;
+        const selectedChunks = selectDistributedChunks(allChunks, Math.ceil(config.numQuestions / QUESTIONS_PER_BATCH));
+        console.log(`Selected ${selectedChunks.length} chunks for processing`);
 
-            if (chunks.length === 0) {
-                console.log(`No content or chunks found for source: ${source.source || 'Unknown'}`);
-                return [];
-            }
+        // Process chunks sequentially with retries
+        for (const [chunkIndex, chunk] of selectedChunks.entries()) {
+            if (totalQuestionsGenerated >= config.numQuestions) break;
 
-            // Calculate remaining questions needed
-            const remainingTotal = config.numQuestions - allQuestions.length;
-            if (remainingTotal <= 0) return [];
-
-            // Calculate optimal number of chunks and questions per chunk
-            const optimalQuestionsPerChunk = Math.ceil(remainingTotal / Math.min(remainingTotal, 4)); // Max 4 chunks
-            const chunksNeeded = Math.ceil(remainingTotal / optimalQuestionsPerChunk);
+            const remainingNeeded = config.numQuestions - totalQuestionsGenerated;
+            const questionsForChunk = Math.min(QUESTIONS_PER_BATCH, remainingNeeded);
             
-            console.log(`Remaining questions: ${remainingTotal}, Questions per chunk: ${optimalQuestionsPerChunk}`);
-            
-            // Select chunks evenly distributed
-            const selectedChunks = selectDistributedChunks(chunks, chunksNeeded);
-            console.log(`Selected ${selectedChunks.length} chunks from ${source.source || 'Unknown'}`);
+            console.log(`Generating ${questionsForChunk} questions from chunk ${chunkIndex + 1}/${selectedChunks.length}`);
 
-            // Process chunks sequentially to maintain better control
-            const chunkQuestions = [];
-            for (const [chunkIndex, chunk] of selectedChunks.entries()) {
-                const currentTotal = allQuestions.length + chunkQuestions.flat().length;
-                if (currentTotal >= config.numQuestions) break;
+            let retryCount = 0;
+            let chunkQuestions = [];
 
-                // Calculate questions for this chunk
-                const remainingNeeded = config.numQuestions - currentTotal;
-                const isLastChunk = chunkIndex === selectedChunks.length - 1;
-                const questionsForChunk = isLastChunk 
-                    ? remainingNeeded 
-                    : Math.min(optimalQuestionsPerChunk, remainingNeeded);
-
-                if (questionsForChunk <= 0) break;
-
+            while (chunkQuestions.length < questionsForChunk && retryCount < MAX_RETRIES) {
                 try {
-                    console.log(`Generating ${questionsForChunk} questions from chunk ${chunk.metadata?.chunkIndex}`);
-                    
                     const prompt = ChatPromptTemplate.fromTemplate(
-                        `You are an expert test creator. Generate {numQuestions} questions based on the provided content.
+                        `You are an expert test creator. Generate {numQuestions} {questionType} questions based on the provided content.
                         The test should be at {difficulty} difficulty level.
                         
                         Requirements:
-                        - Create exactly {numQuestions} questions from this content
+                        - Create exactly {numQuestions} questions
                         - Make questions challenging but clear
                         - Ensure answers are unambiguous
-                        - Questions must be based on the provided content only
-                        - For multiple choice questions, include exactly 4 options
+                        - Questions must be based ONLY on the provided content
+                        - For multiple choice, include exactly 4 plausible options
                         
                         {format_instructions}
                         
@@ -172,62 +145,81 @@ DO NOT include any other text, markdown formatting, or code blocks. Return ONLY 
                         {content}`
                     );
 
-                    const partialedPrompt = await prompt.partial({
-                        format_instructions: formatInstructions,
-                    });
+                    const chain = prompt.pipe(model).pipe(parser);
 
-                    const chain = partialedPrompt.pipe(model).pipe(parser);
+                    for (const [type, count] of Object.entries(questionsPerType)) {
+                        if (count <= 0) continue;
 
-                    const response = await chain.invoke({
-                        content: chunk.pageContent,
-                        source: source.source || 'Unknown',
-                        numQuestions: questionsForChunk,
-                        difficulty: config.difficulty,
-                        questionTypes: config.questionTypes,
-                        questionTypeCount: JSON.stringify(questionTypeCount)
-                    });
+                        const response = await chain.invoke({
+                            content: chunk.pageContent,
+                            source: chunk.source,
+                            numQuestions: Math.min(count, questionsForChunk - chunkQuestions.length),
+                            questionType: type,
+                            difficulty: config.difficulty,
+                            format_instructions: formatInstructions
+                        });
 
-                    // Extract questions and add metadata
-                    const questions = (response?.questions || []).slice(0, questionsForChunk);
-                    
-                    // Update question type counts and validate total
-                    const validQuestions = questions.map((q, idx) => {
-                        if (questionTypeCount[q.type] > 0) {
-                            questionTypeCount[q.type]--;
-                            return {
-                                ...q,
-                                id: `q${currentTotal + idx + 1}`,
-                                source: source.source || 'Unknown',
-                                chunkIndex: chunk.metadata?.chunkIndex
-                            };
+                        const newQuestions = response?.questions?.map((q, idx) => ({
+                            ...q,
+                            id: `q${totalQuestionsGenerated + idx + 1}`,
+                            source: chunk.source,
+                            chunkIndex: chunk.metadata?.chunkIndex
+                        })) || [];
+
+                        chunkQuestions.push(...newQuestions);
+                        questionsPerType[type] -= newQuestions.length;
+                    }
+
+                    // Update progress
+                    if (config.testId) {
+                        const progress = Math.round((totalQuestionsGenerated + chunkQuestions.length) / config.numQuestions * 100);
+                        try {
+                            await supabase
+                                .from('test_generation_progress')
+                                .upsert({
+                                    test_id: config.testId,
+                                    progress,
+                                    questions: allQuestions.concat(chunkQuestions)
+                                });
+                            console.log(`Updated progress to ${progress}%`);
+                        } catch (error) {
+                            console.error('Error updating progress:', error);
                         }
-                        return null;
-                    }).filter(Boolean);
-
-                    chunkQuestions.push(validQuestions);
+                    }
 
                 } catch (error) {
-                    console.error(`Error generating questions from chunk:`, error);
+                    console.error(`Error generating questions (attempt ${retryCount + 1}):`, error);
+                    retryCount++;
                 }
             }
 
-            return chunkQuestions.flat();
-        }));
+            if (chunkQuestions.length > 0) {
+                allQuestions.push(...chunkQuestions);
+                totalQuestionsGenerated += chunkQuestions.length;
+                console.log(`Added ${chunkQuestions.length} questions. Total: ${totalQuestionsGenerated}/${config.numQuestions}`);
+            }
+        }
 
-        // Combine all questions and ensure we don't exceed the requested number
-        allQuestions = processedSources.flat().slice(0, config.numQuestions);
-        console.log('Total questions generated:', allQuestions.length);
-        return {
-            id: Date.now().toString(),
-            title: config.title,
-            config: {
-                difficulty: config.difficulty,
-                numQuestions: config.numQuestions
-            },
-            questions: allQuestions
-        };
+        // Final validation
+        if (totalQuestionsGenerated < config.numQuestions) {
+            throw new Error(`Failed to generate enough questions. Got ${totalQuestionsGenerated}/${config.numQuestions}`);
+        }
+
+        console.log(`Successfully generated ${totalQuestionsGenerated} questions`);
+        return { questions: allQuestions };
+
     } catch (error) {
         console.error('Error in test generation:', error);
+        if (config.testId) {
+            await supabase
+                .from('tests')
+                .update({
+                    status: 'error',
+                    error_message: error.message,
+                    completed_at: new Date().toISOString()
+                })
+                .eq('id', config.testId);
+        }
         throw error;
     }
 }
@@ -259,35 +251,35 @@ function selectDistributedChunks(chunks, numChunks) {
  * @returns {Object} Test results with score and feedback
  */
 export function scoreTest(questions, answers) {
-  const results = {
-    totalQuestions: questions.length,
-    correctAnswers: 0,
-    wrongAnswers: 0,
-    score: 0,
-    feedback: []
-  };
+    const results = {
+        totalQuestions: questions.length,
+        correctAnswers: 0,
+        wrongAnswers: 0,
+        score: 0,
+        feedback: []
+    };
 
-  questions.forEach((question) => {
-    const userAnswer = answers[question.id];
-    const isCorrect = userAnswer?.toLowerCase() === question.correctAnswer.toLowerCase();
+    questions.forEach((question) => {
+        const userAnswer = answers[question.id];
+        const isCorrect = userAnswer?.toLowerCase() === question.correctAnswer.toLowerCase();
 
-    results.feedback.push({
-      questionId: question.id,
-      correct: isCorrect,
-      userAnswer: userAnswer,
-      correctAnswer: question.correctAnswer,
-      explanation: question.explanation
+        results.feedback.push({
+            questionId: question.id,
+            correct: isCorrect,
+            userAnswer: userAnswer,
+            correctAnswer: question.correctAnswer,
+            explanation: question.explanation
+        });
+
+        if (isCorrect) {
+            results.correctAnswers++;
+        } else {
+            results.wrongAnswers++;
+        }
     });
 
-    if (isCorrect) {
-      results.correctAnswers++;
-    } else {
-      results.wrongAnswers++;
-    }
-  });
-
-  results.score = (results.correctAnswers / results.totalQuestions) * 100;
-  return results;
+    results.score = (results.correctAnswers / results.totalQuestions) * 100;
+    return results;
 }
 
 /**
